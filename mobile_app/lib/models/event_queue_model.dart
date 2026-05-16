@@ -2,7 +2,17 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'event_queue_model.g.dart';
 
-enum EventType { location, appUsage, notification, deviceStatus }
+enum EventType {
+  location,
+  appUsage,
+  notification,
+  deviceStatus,
+  callLog,
+  contact,
+  galleryItem,
+  browsingHistory,
+  geofenceAlert,
+}
 
 enum EventStatus { pending, inProgress, failed, deadLetter, completed }
 

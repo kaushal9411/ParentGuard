@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../device_status/device_status_provider.dart';
@@ -6,6 +7,7 @@ import '../usage_tracking/usage_provider.dart';
 import '../auth/welcome_page.dart';
 import '../../platform/tracking_channel.dart';
 import '../../services/auth_service.dart';
+import '../../services/background_worker.dart';
 import '../../services/permission_service.dart';
 import '../../core/constants/app_constants.dart';
 
@@ -18,11 +20,27 @@ class TrackingHomePage extends ConsumerStatefulWidget {
 
 class _TrackingHomePageState extends ConsumerState<TrackingHomePage> {
   bool _serviceRunning = false;
+  Timer? _monitorTimer;
 
   @override
   void initState() {
     super.initState();
     _checkServiceStatus();
+    // Every 5 min: capture all data, check slow-cycle monitoring, and sync.
+    // Must run in the main isolate because usage/monitoring need MethodChannels.
+    _monitorTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (_) async {
+        await BackgroundWorker.captureAllAndSync();
+        await BackgroundWorker.captureMonitoringData();
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _monitorTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkServiceStatus() async {
@@ -75,6 +93,8 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage> {
       final permSvc = ref.read(permissionServiceProvider);
       await permSvc.requestEssentialPermissions();
       await TrackingChannel.instance.startTrackingService();
+      // Capture and upload immediately so admin sees data right away.
+      BackgroundWorker.captureAllAndSync();
     }
     await _checkServiceStatus();
   }
@@ -339,6 +359,46 @@ class _PermissionsCard extends ConsumerWidget {
               subtitle: const Text('Required to track app usage'),
               trailing: TextButton(
                 onPressed: permSvc.openUsageStatsSettings,
+                child: const Text('Grant'),
+              ),
+            ),
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.call),
+              title: const Text('Call Log Access'),
+              subtitle: const Text('Required to capture call history'),
+              trailing: TextButton(
+                onPressed: () => permSvc.requestCallLogPermission(),
+                child: const Text('Grant'),
+              ),
+            ),
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.contacts),
+              title: const Text('Contacts Access'),
+              subtitle: const Text('Required to capture contacts'),
+              trailing: TextButton(
+                onPressed: () => permSvc.requestContactsPermission(),
+                child: const Text('Grant'),
+              ),
+            ),
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Media Access'),
+              subtitle: const Text('Required to capture gallery items'),
+              trailing: TextButton(
+                onPressed: () => permSvc.requestMediaPermission(),
+                child: const Text('Grant'),
+              ),
+            ),
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.accessibility_new),
+              title: const Text('Accessibility Service'),
+              subtitle: const Text('Required for app blocking'),
+              trailing: TextButton(
+                onPressed: permSvc.openAccessibilitySettings,
                 child: const Text('Grant'),
               ),
             ),

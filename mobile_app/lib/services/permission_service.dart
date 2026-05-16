@@ -52,7 +52,31 @@ class PermissionService {
   Future<void> openUsageStatsSettings() =>
       TrackingChannel.instance.requestUsagePermission();
 
-  Future<void> openAppSettings() => openAppSettings();
+  Future<bool> requestCallLogPermission() async {
+    final status = await Permission.phone.request();
+    return status.isGranted;
+  }
+
+  Future<bool> requestContactsPermission() async {
+    final status = await Permission.contacts.request();
+    return status.isGranted;
+  }
+
+  Future<bool> requestMediaPermission() async {
+    // Android 13+ uses READ_MEDIA_IMAGES / READ_MEDIA_VIDEO
+    // permission_handler maps these to photos/videos on Android 13+
+    // and READ_EXTERNAL_STORAGE on older versions.
+    final photos = await Permission.photos.request();
+    final videos = await Permission.videos.request();
+    return photos.isGranted || videos.isGranted;
+  }
+
+  Future<void> openAccessibilitySettings() async {
+    // Opens system Accessibility settings — user enables the service manually.
+    await openAppSettings();
+  }
+
+  Future<void> openSystemSettings() => openAppSettings();
 }
 
 final permissionServiceProvider = Provider<PermissionService>(

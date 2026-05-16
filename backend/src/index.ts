@@ -12,6 +12,7 @@ import eventsRouter from './routes/events';
 import locationRouter from './routes/location';
 import usageRouter from './routes/usage';
 import notificationsRouter from './routes/notifications';
+import commandsRouter from './routes/commands';
 
 const app = express();
 const httpServer = createServer(app);
@@ -37,6 +38,7 @@ app.use('/api/events', eventsRouter);
 app.use('/api/location', locationRouter);
 app.use('/api/usage', usageRouter);
 app.use('/api/notifications', notificationsRouter);
+app.use('/api/commands',     commandsRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

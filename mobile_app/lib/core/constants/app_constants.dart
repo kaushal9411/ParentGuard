@@ -4,9 +4,10 @@ class AppConstants {
   static const String appName = 'ParentalMonitor';
 
   // ── WorkManager task names ────────────────────────────────────────────────
-  static const String syncTaskName = 'pm_sync_task';
-  static const String locationTaskName = 'pm_location_task';
-  static const String usageTaskName = 'pm_usage_task';
+  static const String syncTaskName         = 'pm_sync_task';
+  static const String locationTaskName     = 'pm_location_task';
+  static const String usageTaskName        = 'pm_usage_task';
+  static const String deviceStatusTaskName = 'pm_device_status_task';
 
   // ── Intervals ─────────────────────────────────────────────────────────────
   static const int locationIntervalMinutes = 5;
@@ -28,8 +29,9 @@ class AppConstants {
   static const String prefTrackingEnabled = 'pref_tracking_enabled';
 
   // ── Backend ───────────────────────────────────────────────────────────────
-  // Change to your server IP/domain before building for a real device
-  static const String backendBaseUrl = 'http://10.0.2.2:3000'; // Android emulator → host
+  // 10.0.2.2 = emulator loopback; use your PC's WiFi IP for a real device.
+  // Current PC WiFi IP: 172.20.10.2
+  static const String backendBaseUrl = 'http://172.20.10.2:3000';
 
   // ── Data retention (days) ─────────────────────────────────────────────────
   static const int locationRetentionDays = 30;

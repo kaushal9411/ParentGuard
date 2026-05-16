@@ -1,3 +1,4 @@
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import '../core/utils/device_id.dart';
 import '../core/utils/token_store.dart';
@@ -59,9 +60,10 @@ class AuthService {
       );
 
       await TokenStore.save(
-        token: result.token,
-        userId: result.userId,
-        role: result.role,
+        token:    result.token,
+        userId:   result.userId,
+        role:     result.role,
+        deviceId: deviceId,
       );
 
       return result;
@@ -76,26 +78,29 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    final deviceId = await DeviceIdUtil.get();
+    final deviceId   = await DeviceIdUtil.get();
+    final deviceName = await _getDeviceName();
     try {
       final resp = await _dio.post('/api/auth/login', data: {
-        'email': email,
-        'password': password,
-        'deviceId': deviceId,
+        'email':      email,
+        'password':   password,
+        'deviceId':   deviceId,
+        'deviceName': deviceName,
       });
 
       final result = AuthResult(
-        token: resp.data['token'] as String,
+        token:  resp.data['token']  as String,
         userId: resp.data['userId'] as String,
-        role: resp.data['role'] as String,
-        name: resp.data['name'] as String? ?? '',
-        email: resp.data['email'] as String? ?? email,
+        role:   resp.data['role']   as String,
+        name:   resp.data['name']   as String? ?? '',
+        email:  resp.data['email']  as String? ?? email,
       );
 
       await TokenStore.save(
-        token: result.token,
-        userId: result.userId,
-        role: result.role,
+        token:    result.token,
+        userId:   result.userId,
+        role:     result.role,
+        deviceId: deviceId,
       );
 
       return result;
@@ -139,6 +144,15 @@ class AuthService {
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  Future<String> _getDeviceName() async {
+    try {
+      final info = await DeviceInfoPlugin().androidInfo;
+      return '${info.manufacturer} ${info.model}'.trim();
+    } catch (_) {
+      return 'Android Device';
+    }
+  }
 
   String _extractError(DioException e, String fallback) {
     final data = e.response?.data;

@@ -6,10 +6,11 @@ import '../core/errors/app_exceptions.dart';
 /// Singleton bridge to all native Android method channels.
 ///
 /// Channel layout:
-///   com.parentalmonitor/tracking  → foreground service lifecycle
-///   com.parentalmonitor/location  → one-shot location reads
-///   com.parentalmonitor/usage     → UsageStatsManager
-///   com.parentalmonitor/device    → battery + device info + settings intents
+///   com.parentalmonitor/tracking   → foreground service lifecycle
+///   com.parentalmonitor/location   → one-shot location reads
+///   com.parentalmonitor/usage      → UsageStatsManager
+///   com.parentalmonitor/device     → battery + device info + settings intents
+///   com.parentalmonitor/monitoring → call logs, contacts, gallery, browsing, app blocks
 class TrackingChannel {
   TrackingChannel._();
   static final TrackingChannel instance = TrackingChannel._();
@@ -22,6 +23,8 @@ class TrackingChannel {
       MethodChannel(ChannelConstants.usageChannel);
   static const _device =
       MethodChannel(ChannelConstants.deviceChannel);
+  static const _monitoring =
+      MethodChannel(ChannelConstants.monitoringChannel);
 
   // ── Foreground service ────────────────────────────────────────────────────
 
@@ -105,6 +108,58 @@ class TrackingChannel {
 
   Future<void> openBatterySettings() =>
       _invoke<void>(_device, ChannelConstants.openBatterySettings);
+
+  // ── Monitoring ────────────────────────────────────────────────────────────
+
+  /// Returns list of call log entries since [sinceTimestamp] ms epoch.
+  Future<List<Map<String, dynamic>>> getCallLogs({int sinceTimestamp = 0}) async {
+    final raw = await _invoke<String>(
+      _monitoring,
+      ChannelConstants.getCallLogs,
+      {'sinceTimestamp': sinceTimestamp},
+    );
+    if (raw == null) return [];
+    return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Returns all device contacts.
+  Future<List<Map<String, dynamic>>> getContacts() async {
+    final raw = await _invoke<String>(_monitoring, ChannelConstants.getContacts);
+    if (raw == null) return [];
+    return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Returns gallery items (images + videos) added since [sinceTimestamp] ms epoch.
+  Future<List<Map<String, dynamic>>> getGalleryItems({int sinceTimestamp = 0}) async {
+    final raw = await _invoke<String>(
+      _monitoring,
+      ChannelConstants.getGalleryItems,
+      {'sinceTimestamp': sinceTimestamp},
+    );
+    if (raw == null) return [];
+    return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Returns browser history entries since [sinceTimestamp] ms epoch.
+  Future<List<Map<String, dynamic>>> getBrowsingHistory({int sinceTimestamp = 0}) async {
+    final raw = await _invoke<String>(
+      _monitoring,
+      ChannelConstants.getBrowsingHistory,
+      {'sinceTimestamp': sinceTimestamp},
+    );
+    if (raw == null) return [];
+    return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+  }
+
+  /// Pushes updated blocked-app package list to native SharedPreferences.
+  Future<void> updateBlockedApps(List<String> packages) =>
+      _invoke<void>(_monitoring, ChannelConstants.updateBlockedApps, {'packages': packages});
+
+  /// Returns the geofence zones JSON string stored by the native service.
+  Future<String> getStoredGeofences() async {
+    final raw = await _invoke<String>(_monitoring, ChannelConstants.getStoredGeofences);
+    return raw ?? '[]';
+  }
 
   // ── Internal helper ───────────────────────────────────────────────────────
 

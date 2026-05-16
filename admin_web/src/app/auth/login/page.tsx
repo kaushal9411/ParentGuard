@@ -22,6 +22,10 @@ export default function LoginPage() {
     try {
       const res = await authApi.login(email, password);
       const data = res.data as AuthResponse;
+      if (data.role === 'admin') {
+        setError('Admin accounts must use the Admin Portal.');
+        return;
+      }
       saveAuth(data.token, { userId: data.userId, name: data.name, email: data.email, role: data.role });
       router.push('/dashboard');
     } catch (err: unknown) {

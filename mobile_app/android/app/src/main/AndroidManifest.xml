@@ -71,9 +71,26 @@
         User must grant via: Settings → Apps → Special App Access → Notification Access
     -->
 
-    <!-- ── Accessibility service (optional) ─────────────────────────────── -->
+    <!-- ── Call log ───────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.READ_CALL_LOG" />
+
+    <!-- ── Contacts ────────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+    <!-- ── Media (Android 13+) ─────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Pre-Android 13 fallback -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- ── Audio recording (mic ambient capture) ───────────────────────────── -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- ── Accessibility service (app blocking) ────────────────────────────── -->
     <!--
-        Only needed if AccessibilityMonitorService is enabled.
+        Needed for AccessibilityMonitorService to enforce app block rules.
         User grants via: Settings → Accessibility → Parental Monitor
     -->
     <uses-permission
@@ -151,16 +168,12 @@
                 android:value="conversations|alerting" />
         </service>
 
-        <!-- ── Accessibility service (DISABLED by default) ───────────── -->
-        <!--
-            Set android:enabled="true" to activate.
-            Only needed when UsageStatsManager is unavailable or ungranted.
-        -->
+        <!-- ── Accessibility service (app blocking + foreground detection) ── -->
         <service
             android:name=".services.AccessibilityMonitorService"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true"
-            android:enabled="false">
+            android:enabled="true">
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>

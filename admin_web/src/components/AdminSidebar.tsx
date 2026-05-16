@@ -1,4 +1,5 @@
 'use client';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ShieldCheck, LayoutDashboard, Users, LogOut, ChevronRight } from 'lucide-react';
@@ -12,7 +13,11 @@ const NAV = [
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router   = useRouter();
-  const user     = getAdminUser<{ name: string; email: string }>();
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+
+  useEffect(() => {
+    setUser(getAdminUser<{ name: string; email: string }>());
+  }, []);
 
   function logout() {
     clearAdminAuth();

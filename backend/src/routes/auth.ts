@@ -29,6 +29,7 @@ const LoginSchema = z.object({
   email: z.string().email('Invalid email'),
   password: z.string().min(1, 'Password is required'),
   deviceId: z.string().optional(),
+  deviceName: z.string().optional(),
 });
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────
@@ -102,13 +103,39 @@ router.post(
           return;
         }
 
-        // Update device last_seen if deviceId provided
-        const { deviceId } = req.body as { deviceId?: string };
+        // Admin accounts must use the admin portal — block them here
+        if (user.role === 'admin') {
+          res.status(401).json({ error: 'Invalid credentials' });
+          return;
+        }
+
+        // Auto-register device if new, or update lastSeen if already known
+        const { deviceId, deviceName } = req.body as { deviceId?: string; deviceName?: string };
         if (deviceId) {
-          await prisma.device.updateMany({
-            where: { deviceId, userId: user.userId },
-            data: { lastSeen: new Date(), isOnline: true },
-          });
+          const existing = await prisma.device.findUnique({ where: { deviceId } });
+          if (existing) {
+            // Device exists — verify it belongs to this user
+            if (existing.userId !== user.userId) {
+              res.status(409).json({ error: 'Device is registered to a different account' });
+              return;
+            }
+            await prisma.device.update({
+              where: { deviceId },
+              data: { lastSeen: new Date(), isOnline: true },
+            });
+          } else {
+            // New device — register it under this user
+            await prisma.device.create({
+              data: {
+                deviceId,
+                name: deviceName ?? 'Unknown Device',
+                role: 'child',
+                userId: user.userId,
+                isOnline: true,
+                lastSeen: new Date(),
+              },
+            });
+          }
         }
 
         const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
@@ -118,6 +145,7 @@ router.post(
           token,
           userId: user.userId,
           role: user.role,
+          deviceId: deviceId ?? null,
           name: dbUser?.name ?? '',
           email: dbUser?.email ?? '',
         });

@@ -11,7 +11,10 @@ const BatchSchema = z.object({
     .array(
       z.object({
         id: z.string().min(1),
-        type: z.enum(['location', 'appUsage', 'notification', 'deviceStatus']),
+        type: z.enum([
+          'location', 'appUsage', 'notification', 'deviceStatus',
+          'callLog', 'contact', 'galleryItem', 'browsingHistory', 'geofenceAlert',
+        ]),
         payload: z.record(z.unknown()),
       }),
     )

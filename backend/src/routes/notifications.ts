@@ -10,7 +10,7 @@ router.get('/:deviceId', authenticate, async (req, res) => {
   const before = req.query.before ? new Date(req.query.before as string) : undefined;
 
   const device = await prisma.device.findFirst({
-    where: { deviceId: req.params.deviceId, userId: req.auth.userId },
+    where: { deviceId: req.params.deviceId as string, userId: req.auth.userId },
   });
   if (!device) {
     res.status(404).json({ error: 'Device not found' });
@@ -19,7 +19,7 @@ router.get('/:deviceId', authenticate, async (req, res) => {
 
   const logs = await prisma.notificationLog.findMany({
     where: {
-      deviceId: req.params.deviceId,
+      deviceId: req.params.deviceId as string,
       ...(before ? { postedAt: { lt: before } } : {}),
     },
     orderBy: { postedAt: 'desc' },

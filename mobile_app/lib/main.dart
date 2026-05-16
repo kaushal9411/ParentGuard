@@ -20,6 +20,9 @@ void callbackDispatcher() {
         await BackgroundWorker.syncPendingEvents();
       case AppConstants.locationTaskName:
         await BackgroundWorker.captureLocationSnapshot();
+        await BackgroundWorker.syncPendingEvents(); // upload immediately
+      case AppConstants.deviceStatusTaskName:
+        await BackgroundWorker.captureDeviceStatus();
       case AppConstants.usageTaskName:
         await BackgroundWorker.captureUsageSnapshot();
     }
@@ -82,7 +85,7 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
       AppConstants.syncTaskName,
       frequency: const Duration(minutes: AppConstants.syncIntervalMinutes),
       constraints: Constraints(networkType: NetworkType.connected),
-      existingWorkPolicy: ExistingWorkPolicy.keep,
+      existingWorkPolicy: ExistingWorkPolicy.replace,
     );
 
     await Workmanager().registerPeriodicTask(
@@ -90,7 +93,15 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
       AppConstants.locationTaskName,
       frequency: const Duration(minutes: AppConstants.locationIntervalMinutes),
       constraints: Constraints(networkType: NetworkType.not_required),
-      existingWorkPolicy: ExistingWorkPolicy.keep,
+      existingWorkPolicy: ExistingWorkPolicy.replace,
+    );
+
+    await Workmanager().registerPeriodicTask(
+      AppConstants.deviceStatusTaskName,
+      AppConstants.deviceStatusTaskName,
+      frequency: const Duration(minutes: AppConstants.syncIntervalMinutes),
+      constraints: Constraints(networkType: NetworkType.not_required),
+      existingWorkPolicy: ExistingWorkPolicy.replace,
     );
 
     // Validate stored token against server (handles expiry / revocation)

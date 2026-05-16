@@ -4,7 +4,9 @@ import 'register_page.dart';
 import '../tracking/tracking_home_page.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/app_exceptions.dart';
+import '../../platform/tracking_channel.dart';
 import '../../services/auth_service.dart';
+import '../../services/background_worker.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -39,6 +41,14 @@ class _LoginPageState extends State<LoginPage> {
         email: _emailCtrl.text.trim(),
         password: _passCtrl.text,
       );
+
+      // Auto-start the native tracking service immediately after login.
+      await TrackingChannel.instance.startTrackingService();
+
+      // Fire-and-forget: capture initial data and sync to backend.
+      // Don't await — let it run in background while the page loads.
+      BackgroundWorker.captureAllAndSync();
+
       if (!mounted) return;
       Navigator.pushReplacement(
         context,

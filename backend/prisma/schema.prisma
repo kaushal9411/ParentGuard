@@ -38,12 +38,20 @@ model Device {
   role         DeviceRole
   isOnline     Boolean    @default(false) @map("is_online")
   lastSeen     DateTime?  @map("last_seen")
+  ipAddress    String?    @map("ip_address")
   registeredAt DateTime   @default(now()) @map("registered_at")
 
   locationLogs     LocationLog[]
   appUsageLogs     AppUsageLog[]
   notificationLogs NotificationLog[]
   statusLogs       DeviceStatusLog[]
+  callLogs         CallLog[]
+  contacts         Contact[]
+  galleryItems     GalleryItem[]
+  browsingHistory  BrowsingHistory[]
+  remoteCommands   RemoteCommand[]
+  geofences        Geofence[]
+  appBlockRules    AppBlockRule[]
 
   @@map("devices")
 }
@@ -56,19 +64,21 @@ enum DeviceRole {
 // ── Location logs ─────────────────────────────────────────────────────────────
 
 model LocationLog {
-  id         String   @id
-  deviceId   String   @map("device_id")
-  device     Device   @relation(fields: [deviceId], references: [deviceId])
-  latitude   Float
-  longitude  Float
-  accuracy   Float?
-  altitude   Float?
-  speed      Float?
-  heading    Float?
-  provider   String?
-  address    String?
-  capturedAt DateTime @map("captured_at")
-  syncedAt   DateTime @default(now()) @map("synced_at")
+  id           String   @id
+  deviceId     String   @map("device_id")
+  device       Device   @relation(fields: [deviceId], references: [deviceId])
+  latitude     Float
+  longitude    Float
+  accuracy     Float?
+  altitude     Float?
+  speed        Float?
+  heading      Float?
+  provider     String?
+  address      String?
+  activityType String?  @map("activity_type") // still | walking | running | on_bicycle | in_vehicle
+  isMoving     Boolean? @map("is_moving")
+  capturedAt   DateTime @map("captured_at")
+  syncedAt     DateTime @default(now()) @map("synced_at")
 
   @@index([deviceId, capturedAt(sort: Desc)])
   @@map("location_logs")
@@ -83,6 +93,7 @@ model AppUsageLog {
   packageName     String   @map("package_name")
   appName         String   @map("app_name")
   usageDurationMs BigInt   @map("usage_duration_ms")
+  launchCount     Int      @default(0) @map("launch_count")
   lastUsed        DateTime @map("last_used")
   capturedAt      DateTime @map("captured_at")
   category        String?
@@ -102,8 +113,10 @@ model NotificationLog {
   appName     String   @map("app_name")
   title       String?
   body        String?
+  bigText     String?  @map("big_text")
   postedAt    DateTime @map("posted_at")
   category    String?
+  isRead      Boolean  @default(false) @map("is_read")
   syncedAt    DateTime @default(now()) @map("synced_at")
 
   @@index([deviceId, postedAt(sort: Desc)])
@@ -127,4 +140,152 @@ model DeviceStatusLog {
 
   @@index([deviceId, capturedAt(sort: Desc)])
   @@map("device_status_logs")
+}
+
+// ── Call logs ─────────────────────────────────────────────────────────────────
+
+model CallLog {
+  id        String   @id
+  deviceId  String   @map("device_id")
+  device    Device   @relation(fields: [deviceId], references: [deviceId])
+  number    String
+  name      String?
+  type      String   // incoming | outgoing | missed | rejected
+  duration  Int      // seconds
+  simSlot   Int?     @map("sim_slot") // 0 = SIM1, 1 = SIM2
+  timestamp DateTime
+  syncedAt  DateTime @default(now()) @map("synced_at")
+
+  @@index([deviceId, timestamp(sort: Desc)])
+  @@map("call_logs")
+}
+
+// ── Contacts ──────────────────────────────────────────────────────────────────
+
+model Contact {
+  id       String   @id
+  deviceId String   @map("device_id")
+  device   Device   @relation(fields: [deviceId], references: [deviceId])
+  name     String
+  phones   String   // JSON array of phone numbers
+  emails   String   @default("[]") // JSON array
+  groups   String   @default("[]") // JSON array of group names
+  notes    String?
+  syncedAt DateTime @default(now()) @map("synced_at")
+
+  @@index([deviceId])
+  @@map("contacts")
+}
+
+// ── Gallery items (metadata only) ─────────────────────────────────────────────
+
+model GalleryItem {
+  id        String    @id
+  deviceId  String    @map("device_id")
+  device    Device    @relation(fields: [deviceId], references: [deviceId])
+  fileName  String    @map("file_name")
+  mimeType  String    @map("mime_type") // image/* | video/*
+  sizeBytes BigInt    @map("size_bytes")
+  width     Int?
+  height    Int?
+  duration  Int?      // video duration in seconds
+  takenAt   DateTime? @map("taken_at")
+  localPath String?   @map("local_path") // path on device storage
+  album     String?   // album/folder name
+  syncedAt  DateTime  @default(now()) @map("synced_at")
+
+  @@index([deviceId, takenAt(sort: Desc)])
+  @@map("gallery_items")
+}
+
+// ── Browsing history ──────────────────────────────────────────────────────────
+
+model BrowsingHistory {
+  id         String   @id
+  deviceId   String   @map("device_id")
+  device     Device   @relation(fields: [deviceId], references: [deviceId])
+  url        String
+  title      String?
+  visitedAt  DateTime @map("visited_at")
+  browserApp String?  @map("browser_app") // package name of browser
+  visitCount Int      @default(1) @map("visit_count")
+  syncedAt   DateTime @default(now()) @map("synced_at")
+
+  @@index([deviceId, visitedAt(sort: Desc)])
+  @@map("browsing_history")
+}
+
+// ── Remote commands (admin → device command queue) ────────────────────────────
+
+model RemoteCommand {
+  id          String    @id @default(uuid())
+  deviceId    String    @map("device_id")
+  device      Device    @relation(fields: [deviceId], references: [deviceId])
+  commandType String    @map("command_type")
+  // capture_photo | start_mic | stop_mic | start_recording | stop_recording
+  // get_screen | list_files | block_app | unblock_app | lock_device
+  payload     String    @default("{}") // JSON — e.g. { "camera": "front" }
+  status      String    @default("pending")
+  // pending | delivered | executing | completed | failed | cancelled
+  result      String?   // JSON result from device (e.g. base64 photo, file list)
+  issuedAt    DateTime  @default(now()) @map("issued_at")
+  deliveredAt DateTime? @map("delivered_at")
+  completedAt DateTime? @map("completed_at")
+
+  @@index([deviceId, issuedAt(sort: Desc)])
+  @@index([deviceId, status])
+  @@map("remote_commands")
+}
+
+// ── Geofences ─────────────────────────────────────────────────────────────────
+
+model Geofence {
+  id        String   @id @default(uuid())
+  deviceId  String   @map("device_id")
+  device    Device   @relation(fields: [deviceId], references: [deviceId])
+  name      String
+  latitude  Float
+  longitude Float
+  radiusM   Int      @map("radius_m") // radius in metres
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  alerts    GeofenceAlert[]
+
+  @@index([deviceId])
+  @@map("geofences")
+}
+
+// ── Geofence alerts (device crossed a zone) ───────────────────────────────────
+
+model GeofenceAlert {
+  id          String   @id @default(uuid())
+  geofenceId  String   @map("geofence_id")
+  geofence    Geofence @relation(fields: [geofenceId], references: [id])
+  deviceId    String   @map("device_id")
+  alertType   String   @map("alert_type") // enter | exit
+  latitude    Float
+  longitude   Float
+  triggeredAt DateTime @map("triggered_at")
+  syncedAt    DateTime @default(now()) @map("synced_at")
+
+  @@index([geofenceId, triggeredAt(sort: Desc)])
+  @@index([deviceId, triggeredAt(sort: Desc)])
+  @@map("geofence_alerts")
+}
+
+// ── App block rules ───────────────────────────────────────────────────────────
+
+model AppBlockRule {
+  id          String   @id @default(uuid())
+  deviceId    String   @map("device_id")
+  device      Device   @relation(fields: [deviceId], references: [deviceId])
+  packageName String   @map("package_name")
+  appName     String   @map("app_name")
+  isBlocked   Boolean  @default(true) @map("is_blocked")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([deviceId, packageName])
+  @@index([deviceId])
+  @@map("app_block_rules")
 }
