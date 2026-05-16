@@ -1,0 +1,111 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:workmanager/workmanager.dart';
+
+import 'core/constants/app_constants.dart';
+import 'core/utils/token_store.dart';
+import 'services/auth_service.dart';
+import 'services/background_worker.dart';
+import 'services/permission_service.dart';
+import 'storage/database_provider.dart';
+import 'features/auth/welcome_page.dart';
+import 'features/tracking/tracking_home_page.dart';
+
+// WorkManager callback — runs in an isolated Dart entry point.
+@pragma('vm:entry-point')
+void callbackDispatcher() {
+  Workmanager().executeTask((task, inputData) async {
+    switch (task) {
+      case AppConstants.syncTaskName:
+        await BackgroundWorker.syncPendingEvents();
+      case AppConstants.locationTaskName:
+        await BackgroundWorker.captureLocationSnapshot();
+      case AppConstants.usageTaskName:
+        await BackgroundWorker.captureUsageSnapshot();
+    }
+    return true;
+  });
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
+
+  runApp(const ProviderScope(child: ParentalMonitorApp()));
+}
+
+class ParentalMonitorApp extends StatelessWidget {
+  const ParentalMonitorApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Device Monitor',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1A237E)),
+        useMaterial3: true,
+      ),
+      home: const AppEntryPoint(),
+    );
+  }
+}
+
+class AppEntryPoint extends ConsumerStatefulWidget {
+  const AppEntryPoint({super.key});
+
+  @override
+  ConsumerState<AppEntryPoint> createState() => _AppEntryPointState();
+}
+
+class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
+  bool _ready = false;
+  bool _loggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _bootstrap();
+  }
+
+  Future<void> _bootstrap() async {
+    // Ensure DB is initialised on first frame
+    ref.read(appDatabaseProvider);
+
+    // Request permissions, then register periodic WorkManager tasks
+    final permSvc = ref.read(permissionServiceProvider);
+    await permSvc.requestEssentialPermissions();
+
+    await Workmanager().registerPeriodicTask(
+      AppConstants.syncTaskName,
+      AppConstants.syncTaskName,
+      frequency: const Duration(minutes: AppConstants.syncIntervalMinutes),
+      constraints: Constraints(networkType: NetworkType.connected),
+      existingWorkPolicy: ExistingWorkPolicy.keep,
+    );
+
+    await Workmanager().registerPeriodicTask(
+      AppConstants.locationTaskName,
+      AppConstants.locationTaskName,
+      frequency: const Duration(minutes: AppConstants.locationIntervalMinutes),
+      constraints: Constraints(networkType: NetworkType.not_required),
+      existingWorkPolicy: ExistingWorkPolicy.keep,
+    );
+
+    // Validate stored token against server (handles expiry / revocation)
+    final authSvc = AuthService(AppConstants.backendBaseUrl);
+    final loggedIn = await authSvc.validateToken();
+    if (mounted) setState(() { _ready = true; _loggedIn = loggedIn; });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_ready) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return _loggedIn ? const TrackingHomePage() : const WelcomePage();
+  }
+}

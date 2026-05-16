@@ -1,0 +1,63 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace "com.parentalmonitor.child"
+    compileSdk 36
+    ndkVersion flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    defaultConfig {
+        applicationId "com.parentalmonitor.child"
+        minSdkVersion flutter.minSdkVersion       // Android 6.0 — covers ~99 % of active devices
+        targetSdk 36
+        versionCode flutter.versionCode
+        versionName flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.debug   // replace with release keystore
+            minifyEnabled false
+        shrinkResources false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"),
+                         "proguard-rules.pro"
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            debuggable true
+        }
+    }
+}
+
+flutter {
+    source "../.."
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+
+    // FusedLocationProviderClient
+    implementation "com.google.android.gms:play-services-location:21.2.0"
+
+    // Coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3"
+
+    // Lifecycle service (for lifecycle-aware coroutine scope)
+    implementation "androidx.lifecycle:lifecycle-service:2.7.0"
+
+    // Core KTX
+    implementation "androidx.core:core-ktx:1.12.0"
+}

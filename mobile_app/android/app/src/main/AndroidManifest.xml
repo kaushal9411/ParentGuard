@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ── Network ──────────────────────────────────────────────────────── -->
+    <!-- Future backend sync -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Pre-flight connectivity check before sync attempt -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Prefer WiFi sync -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- ── Location ─────────────────────────────────────────────────────── -->
+    <!-- Standard GPS / network-fused location -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!--
+        Background location (Android 10+).
+        Must be requested SEPARATELY after foreground location is granted.
+        Android 11+: user must go to Settings; "Allow all the time" is removed
+        from the in-app dialog.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- ── Foreground service ────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!--
+        API 34+: must declare specific foreground service types.
+        We use location (GPS) + dataSync (future batch uploads).
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- ── Boot receiver ────────────────────────────────────────────────── -->
+    <!-- Auto-restart tracking after device reboot -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- ── Wake lock ─────────────────────────────────────────────────────── -->
+    <!-- Prevent CPU sleep during background location fix -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- ── Battery optimisation ─────────────────────────────────────────── -->
+    <!--
+        Lets us request exemption from Doze / battery optimisation.
+        Directs user to Settings; cannot force-grant programmatically.
+    -->
+    <uses-permission
+        android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- ── Usage stats ───────────────────────────────────────────────────── -->
+    <!--
+        Protected/signature permission — cannot be auto-granted.
+        User must navigate to: Settings → Apps → Special App Access → Usage Access
+    -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- ── Installed apps ───────────────────────────────────────────────── -->
+    <!--
+        API 30+: required to query / iterate all installed packages.
+        Note: Google Play has restrictions; acceptable for private/sideloaded APK.
+    -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
+
+    <!-- ── Notification access ──────────────────────────────────────────── -->
+    <!--
+        No <uses-permission> tag needed — binding is declared on the service.
+        User must grant via: Settings → Apps → Special App Access → Notification Access
+    -->
+
+    <!-- ── Accessibility service (optional) ─────────────────────────────── -->
+    <!--
+        Only needed if AccessibilityMonitorService is enabled.
+        User grants via: Settings → Accessibility → Parental Monitor
+    -->
+    <uses-permission
+        android:name="android.permission.BIND_ACCESSIBILITY_SERVICE"
+        tools:ignore="ProtectedPermissions" />
+
+    <application
+        android:name="${applicationName}"
+        android:label="Device Monitor"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:usesCleartextTraffic="true">
+
+        <!-- ── Main Flutter activity ─────────────────────────────────── -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <meta-data
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ── Persistent tracking foreground service ────────────────── -->
+        <!--
+            foregroundServiceType must list all types the service uses.
+            location  = GPS capture
+            dataSync  = future background batch sync
+        -->
+        <service
+            android:name=".services.TrackingForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location|dataSync" />
+
+        <!-- ── Boot / update receiver ────────────────────────────────── -->
+        <receiver
+            android:name=".receivers.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- ── Notification listener service ─────────────────────────── -->
+        <!--
+            System binds this automatically once the user grants Notification Access.
+            default_filter_types limits capture to conversation + alerting channels
+            to reduce noise from silent system notifications.
+        -->
+        <service
+            android:name=".listeners.NotificationMonitorService"
+            android:label="Notification Monitor"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.notification.default_filter_types"
+                android:value="conversations|alerting" />
+        </service>
+
+        <!-- ── Accessibility service (DISABLED by default) ───────────── -->
+        <!--
+            Set android:enabled="true" to activate.
+            Only needed when UsageStatsManager is unavailable or ungranted.
+        -->
+        <service
+            android:name=".services.AccessibilityMonitorService"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+            android:exported="true"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- Flutter embedding v2 marker -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+
+    </application>
+</manifest>

@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         UserRole @default(child)
+  createdAt    DateTime @default(now()) @map("created_at")
+  devices      Device[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  parent
+  child
+  admin
+}
+
+// ── Devices ──────────────────────────────────────────────────────────────────
+
+model Device {
+  id           String     @id @default(uuid())
+  deviceId     String     @unique @map("device_id")
+  name         String
+  userId       String     @map("user_id")
+  user         User       @relation(fields: [userId], references: [id])
+  role         DeviceRole
+  isOnline     Boolean    @default(false) @map("is_online")
+  lastSeen     DateTime?  @map("last_seen")
+  registeredAt DateTime   @default(now()) @map("registered_at")
+
+  locationLogs     LocationLog[]
+  appUsageLogs     AppUsageLog[]
+  notificationLogs NotificationLog[]
+  statusLogs       DeviceStatusLog[]
+
+  @@map("devices")
+}
+
+enum DeviceRole {
+  child
+  parent
+}
+
+// ── Location logs ─────────────────────────────────────────────────────────────
+
+model LocationLog {
+  id         String   @id
+  deviceId   String   @map("device_id")
+  device     Device   @relation(fields: [deviceId], references: [deviceId])
+  latitude   Float
+  longitude  Float
+  accuracy   Float?
+  altitude   Float?
+  speed      Float?
+  heading    Float?
+  provider   String?
+  address    String?
+  capturedAt DateTime @map("captured_at")
+  syncedAt   DateTime @default(now()) @map("synced_at")
+
+  @@index([deviceId, capturedAt(sort: Desc)])
+  @@map("location_logs")
+}
+
+// ── App usage logs ────────────────────────────────────────────────────────────
+
+model AppUsageLog {
+  id              String   @id
+  deviceId        String   @map("device_id")
+  device          Device   @relation(fields: [deviceId], references: [deviceId])
+  packageName     String   @map("package_name")
+  appName         String   @map("app_name")
+  usageDurationMs BigInt   @map("usage_duration_ms")
+  lastUsed        DateTime @map("last_used")
+  capturedAt      DateTime @map("captured_at")
+  category        String?
+  syncedAt        DateTime @default(now()) @map("synced_at")
+
+  @@index([deviceId, capturedAt(sort: Desc)])
+  @@map("app_usage_logs")
+}
+
+// ── Notification logs ─────────────────────────────────────────────────────────
+
+model NotificationLog {
+  id          String   @id
+  deviceId    String   @map("device_id")
+  device      Device   @relation(fields: [deviceId], references: [deviceId])
+  packageName String   @map("package_name")
+  appName     String   @map("app_name")
+  title       String?
+  body        String?
+  postedAt    DateTime @map("posted_at")
+  category    String?
+  syncedAt    DateTime @default(now()) @map("synced_at")
+
+  @@index([deviceId, postedAt(sort: Desc)])
+  @@map("notification_logs")
+}
+
+// ── Device status logs ────────────────────────────────────────────────────────
+
+model DeviceStatusLog {
+  id             String   @id
+  deviceId       String   @map("device_id")
+  device         Device   @relation(fields: [deviceId], references: [deviceId])
+  batteryLevel   Int      @map("battery_level")
+  isCharging     Boolean  @map("is_charging")
+  networkType    String   @map("network_type")
+  isConnected    Boolean  @map("is_connected")
+  wifiSsid       String?  @map("wifi_ssid")
+  signalStrength Int?     @map("signal_strength")
+  capturedAt     DateTime @map("captured_at")
+  syncedAt       DateTime @default(now()) @map("synced_at")
+
+  @@index([deviceId, capturedAt(sort: Desc)])
+  @@map("device_status_logs")
+}
