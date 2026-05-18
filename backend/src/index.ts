@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import path from 'path';
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
@@ -13,13 +14,17 @@ import locationRouter from './routes/location';
 import usageRouter from './routes/usage';
 import notificationsRouter from './routes/notifications';
 import commandsRouter from './routes/commands';
+import galleryRouter, { GALLERY_UPLOADS_DIR } from './routes/gallery';
 
 const app = express();
 const httpServer = createServer(app);
 
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors());
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({ limit: '20mb' }));
+
+// Serve uploaded gallery images as static files
+app.use('/uploads/gallery', express.static(GALLERY_UPLOADS_DIR));
 
 // Initialize Passport strategies (Local + JWT)
 initPassport();
@@ -39,6 +44,7 @@ app.use('/api/location', locationRouter);
 app.use('/api/usage', usageRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/commands',     commandsRouter);
+app.use('/api/gallery',      galleryRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

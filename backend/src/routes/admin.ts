@@ -151,7 +151,7 @@ router.get('/users/:userId', authenticate, requireAdmin, async (req, res) => {
       where: dWhere, orderBy: { name: 'asc' }, take: 100,
     }),
     prisma.galleryItem.findMany({
-      where: dWhere, orderBy: { takenAt: 'desc' }, take: 50,
+      where: dWhere, orderBy: { syncedAt: 'desc' }, take: 1000,
     }),
     prisma.browsingHistory.findMany({
       where: dWhere, orderBy: { visitedAt: 'desc' }, take: 50,

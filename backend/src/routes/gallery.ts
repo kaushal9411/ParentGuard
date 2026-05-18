@@ -1,0 +1,64 @@
+import { Router } from 'express';
+import fs from 'fs/promises';
+import path from 'path';
+import { authenticate } from '../middleware/auth';
+import { prisma } from '../config/database';
+
+const router = Router();
+
+export const GALLERY_UPLOADS_DIR = path.join(__dirname, '../../uploads/gallery');
+
+const MIME_EXT: Record<string, string> = {
+  'image/jpeg':      '.jpg',
+  'image/png':       '.png',
+  'image/webp':      '.webp',
+  'video/mp4':       '.mp4',
+  'video/3gpp':      '.3gp',
+  'video/3gpp2':     '.3g2',
+  'video/mpeg':      '.mpeg',
+  'video/quicktime': '.mov',
+  'video/webm':      '.webm',
+  'video/x-msvideo': '.avi',
+};
+
+// POST /api/gallery/upload/:itemId
+// Body: { deviceId: string, imageData: string (base64), mimeType?: string }
+router.post('/upload/:itemId', authenticate, async (req, res) => {
+  const { itemId } = req.params;
+  const { deviceId, imageData, mimeType } = req.body as {
+    deviceId?: string; imageData?: string; mimeType?: string;
+  };
+
+  if (!deviceId || !imageData) {
+    res.status(400).json({ error: 'deviceId and imageData required' });
+    return;
+  }
+
+  const device = await prisma.device.findFirst({
+    where: { deviceId, userId: req.auth.userId },
+  });
+  if (!device) {
+    res.status(403).json({ error: 'Forbidden' });
+    return;
+  }
+
+  const dir = path.join(GALLERY_UPLOADS_DIR, deviceId);
+  await fs.mkdir(dir, { recursive: true });
+
+  const ext      = (mimeType && MIME_EXT[mimeType]) ?? '.jpg';
+  const fileName = `${itemId}${ext}`;
+  const filePath = path.join(dir, fileName);
+  const buffer   = Buffer.from(imageData, 'base64');
+  await fs.writeFile(filePath, buffer);
+
+  const imageUrl = `/uploads/gallery/${deviceId}/${fileName}`;
+
+  await prisma.galleryItem.updateMany({
+    where: { id: String(itemId), deviceId: String(deviceId) },
+    data: { imageUrl },
+  });
+
+  res.json({ success: true, imageUrl });
+});
+
+export default router;

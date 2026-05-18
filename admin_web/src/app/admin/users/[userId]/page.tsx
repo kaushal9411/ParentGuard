@@ -1,5 +1,13 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+
+function galleryImgSrc(item: { imageUrl: string | null; thumbnail: string | null }): string | null {
+  if (item.imageUrl) return `${API_URL}${item.imageUrl}`;
+  if (item.thumbnail) return `data:image/jpeg;base64,${item.thumbnail}`;
+  return null;
+}
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, User, Mail, Calendar, Smartphone, MapPin, Bell, BarChart2,
@@ -26,7 +34,7 @@ interface NotifByApp { [app: string]: { id: string; title: string | null; body: 
 interface UsageLog { id: string; appName: string; packageName: string; usageDurationMs: string; capturedAt: string; }
 interface CallLog { id: string; number: string; name: string | null; type: string; duration: number; timestamp: string; }
 interface Contact { id: string; name: string; phones: string; emails: string; }
-interface GalleryItem { id: string; fileName: string; mimeType: string; sizeBytes: string; width: number | null; height: number | null; duration: number | null; takenAt: string | null; }
+interface GalleryItem { id: string; fileName: string; mimeType: string; sizeBytes: string; width: number | null; height: number | null; duration: number | null; takenAt: string | null; thumbnail: string | null; imageUrl: string | null; album: string | null; }
 interface BrowsingItem { id: string; url: string; title: string | null; visitedAt: string; }
 interface StatusLog { batteryLevel: number; isCharging: boolean; networkType: string; isConnected: boolean; wifiSsid: string | null; signalStrength: number | null; capturedAt: string; }
 
@@ -428,76 +436,316 @@ function ContactsTab({ data }: { data: UserDetail }) {
   );
 }
 
+// ─── Gallery lightbox modal ───────────────────────────────────────────────────
+function GalleryLightbox({
+  item, items, onClose, onNav,
+}: {
+  item: GalleryItem;
+  items: GalleryItem[];
+  onClose: () => void;
+  onNav: (item: GalleryItem) => void;
+}) {
+  const isVideo = item.mimeType.startsWith('video');
+  const idx     = items.findIndex((g) => g.id === item.id);
+
+  // keyboard navigation + close
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight' && idx < items.length - 1) onNav(items[idx + 1]);
+      if (e.key === 'ArrowLeft'  && idx > 0)                onNav(items[idx - 1]);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onClose, onNav, idx, items]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black/95 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-6 py-4 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+        <div className="min-w-0">
+          <p className="text-white font-semibold text-sm truncate">{item.fileName}</p>
+          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400">
+            <span>{item.mimeType}</span>
+            <span>{fmtBytes(Number(item.sizeBytes))}</span>
+            {item.width && item.height && <span>{item.width}×{item.height}</span>}
+            {item.duration && <span>{fmtDuration(item.duration)}</span>}
+            {item.takenAt && <span>{new Date(item.takenAt).toLocaleString()}</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 ml-4 flex-shrink-0">
+          <span className="text-gray-500 text-xs">{idx + 1} / {items.length}</span>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      {/* Media area */}
+      <div className="flex-1 flex items-center justify-center relative min-h-0 px-16" onClick={(e) => e.stopPropagation()}>
+        {/* Prev */}
+        {idx > 0 && (
+          <button
+            onClick={() => onNav(items[idx - 1])}
+            className="absolute left-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white text-xl transition-colors z-10"
+          >
+            ‹
+          </button>
+        )}
+
+        {isVideo ? (
+          item.imageUrl ? (
+            <video
+              key={item.id}
+              src={`${API_URL}${item.imageUrl}`}
+              controls
+              autoPlay={false}
+              className="max-w-full max-h-full rounded-lg"
+              style={{ maxHeight: 'calc(100vh - 160px)' }}
+            />
+          ) : galleryImgSrc(item) ? (
+            <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={galleryImgSrc(item)!}
+                alt={item.fileName}
+                className="max-w-full max-h-full object-contain rounded-lg select-none opacity-60"
+                style={{ maxHeight: 'calc(100vh - 160px)' }}
+              />
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-300">
+                <Video size={48} />
+                <p className="text-sm">Video not yet uploaded</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 text-gray-500">
+              <Video size={64} />
+              <p className="text-sm">Preview not available</p>
+            </div>
+          )
+        ) : galleryImgSrc(item) ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={galleryImgSrc(item)!}
+            alt={item.fileName}
+            className="max-w-full max-h-full object-contain rounded-lg select-none"
+            style={{ maxHeight: 'calc(100vh - 160px)' }}
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-4 text-gray-500">
+            <Image size={64} />
+            <p className="text-sm">Preview not available</p>
+          </div>
+        )}
+
+        {/* Next */}
+        {idx < items.length - 1 && (
+          <button
+            onClick={() => onNav(items[idx + 1])}
+            className="absolute right-4 w-10 h-10 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white text-xl transition-colors z-10"
+          >
+            ›
+          </button>
+        )}
+      </div>
+
+      {/* Bottom strip — thumbnail strip for quick navigation */}
+      <div className="flex-shrink-0 flex items-center gap-2 px-6 py-4 overflow-x-auto" onClick={(e) => e.stopPropagation()}>
+        {items.map((g) => {
+          const src = galleryImgSrc(g);
+          return (
+            <button
+              key={g.id}
+              onClick={() => onNav(g)}
+              className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${g.id === item.id ? 'border-indigo-400 opacity-100' : 'border-transparent opacity-50 hover:opacity-80'}`}
+            >
+              {src ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={src} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-gray-700 flex items-center justify-center">
+                  {g.mimeType.startsWith('video') ? <Video size={16} className="text-gray-400" /> : <Image size={16} className="text-gray-400" />}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Gallery grid (shared between album view and flat view) ──────────────────
+function GalleryGrid({
+  items,
+  onOpen,
+}: {
+  items: GalleryItem[];
+  onOpen: (item: GalleryItem) => void;
+}) {
+  if (items.length === 0) return <Empty msg="No items in this folder" />;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+      {items.map((g) => {
+        const isVideo = g.mimeType.startsWith('video');
+        const src = galleryImgSrc(g);
+        return (
+          <button
+            key={g.id}
+            onClick={() => onOpen(g)}
+            className="bg-gray-800 rounded-xl overflow-hidden text-left hover:ring-2 hover:ring-indigo-500 transition-all group"
+          >
+            <div className="aspect-square bg-gray-700 flex items-center justify-center relative overflow-hidden">
+              {src ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={src} alt={g.fileName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
+              ) : (
+                isVideo ? <Video size={24} className="text-purple-400" /> : <Image size={24} className="text-pink-400" />
+              )}
+              {isVideo && (
+                <>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Video size={14} className="text-white ml-0.5" />
+                    </div>
+                  </div>
+                  {g.duration && (
+                    <span className="absolute bottom-1 right-1 bg-black/70 text-white text-[10px] px-1 py-0.5 rounded">
+                      {fmtDuration(g.duration)}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+            <div className="px-1.5 py-1">
+              <p className="text-white text-[10px] truncate">{g.fileName}</p>
+              <p className="text-gray-600 text-[10px]">{fmtBytes(Number(g.sizeBytes))}</p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Tab: Gallery ─────────────────────────────────────────────────────────────
 function GalleryTab({ data }: { data: UserDetail }) {
   const { galleryItems } = data;
-  const [filter, setFilter] = useState<'all' | 'image' | 'video'>('all');
+  const [lightbox, setLightbox]   = useState<GalleryItem | null>(null);
+  const [album, setAlbum]         = useState<string>('__all__');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'image' | 'video'>('all');
 
-  const filtered = galleryItems.filter((g) =>
-    filter === 'all' ? true : g.mimeType.startsWith(filter)
-  );
+  // Build ordered album list: sort by item count desc
+  const albumMap = galleryItems.reduce<Record<string, GalleryItem[]>>((acc, g) => {
+    const key = g.album || 'Unknown';
+    (acc[key] ??= []).push(g);
+    return acc;
+  }, {});
+  const albums = Object.entries(albumMap).sort((a, b) => b[1].length - a[1].length);
+
+  const baseItems = album === '__all__' ? galleryItems : (albumMap[album] ?? []);
+  const visibleItems = typeFilter === 'all' ? baseItems : baseItems.filter((g) => g.mimeType.startsWith(typeFilter));
+
+  // Lightbox navigates only within visibleItems
+  const openLightbox = (item: GalleryItem) => setLightbox(item);
 
   const images = galleryItems.filter((g) => g.mimeType.startsWith('image')).length;
   const videos = galleryItems.filter((g) => g.mimeType.startsWith('video')).length;
 
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'All Items',  value: galleryItems.length, color: 'text-white' },
-          { label: 'Photos',     value: images,              color: 'text-pink-400' },
-          { label: 'Videos',     value: videos,              color: 'text-purple-400' },
-        ].map((s) => (
-          <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center">
-            <p className={`text-2xl font-extrabold ${s.color}`}>{s.value}</p>
-            <p className="text-gray-400 text-xs mt-0.5">{s.label}</p>
-          </div>
-        ))}
-      </div>
+  // Icon for known album names
+  const albumIcon = (name: string) => {
+    const n = name.toLowerCase();
+    if (n.includes('camera'))     return <Camera size={14} />;
+    if (n.includes('screenshot')) return <Monitor size={14} />;
+    if (n.includes('video'))      return <Video size={14} />;
+    if (n.includes('download'))   return <FolderOpen size={14} />;
+    return <Image size={14} />;
+  };
 
-      <Card className="p-6">
-        <div className="flex items-center gap-3 mb-5">
-          <SectionHeader icon={<Image size={18} />} title="Gallery" count={filtered.length} />
-          <div className="ml-auto flex items-center gap-2">
-            {(['all', 'image', 'video'] as const).map((f) => (
-              <button key={f} onClick={() => setFilter(f)}
-                className={`text-xs px-3 py-1 rounded-full transition-colors capitalize ${filter === f ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
-                {f === 'all' ? 'All' : f === 'image' ? 'Photos' : 'Videos'}
+  return (
+    <>
+      {lightbox && (
+        <GalleryLightbox
+          item={lightbox}
+          items={visibleItems}
+          onClose={() => setLightbox(null)}
+          onNav={setLightbox}
+        />
+      )}
+
+      <div className="space-y-5">
+        {/* Stats row */}
+        <div className="grid grid-cols-3 gap-4">
+          {[
+            { label: 'Total Items', value: galleryItems.length, color: 'text-white' },
+            { label: 'Photos',      value: images,              color: 'text-pink-400' },
+            { label: 'Videos',      value: videos,              color: 'text-purple-400' },
+          ].map((s) => (
+            <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center">
+              <p className={`text-2xl font-extrabold ${s.color}`}>{s.value}</p>
+              <p className="text-gray-400 text-xs mt-0.5">{s.label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex gap-5">
+          {/* ── Album sidebar ── */}
+          <div className="flex-shrink-0 w-48">
+            <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2 px-1">Folders</p>
+            <div className="space-y-1">
+              <button
+                onClick={() => setAlbum('__all__')}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${album === '__all__' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <FolderOpen size={14} className="flex-shrink-0" />
+                  <span className="truncate">All Photos</span>
+                </span>
+                <span className={`text-xs flex-shrink-0 ml-1 ${album === '__all__' ? 'text-indigo-200' : 'text-gray-600'}`}>{galleryItems.length}</span>
               </button>
-            ))}
+              {albums.map(([name, items]) => (
+                <button
+                  key={name}
+                  onClick={() => setAlbum(name)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${album === name ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                >
+                  <span className="flex items-center gap-2 min-w-0">
+                    <span className="flex-shrink-0">{albumIcon(name)}</span>
+                    <span className="truncate">{name}</span>
+                  </span>
+                  <span className={`text-xs flex-shrink-0 ml-1 ${album === name ? 'text-indigo-200' : 'text-gray-600'}`}>{items.length}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── Grid area ── */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-bold text-sm">
+                {album === '__all__' ? 'All Photos & Videos' : album}
+                <span className="text-gray-500 font-normal ml-2 text-xs">{visibleItems.length} items</span>
+              </h3>
+              <div className="flex items-center gap-1.5">
+                {(['all', 'image', 'video'] as const).map((f) => (
+                  <button key={f} onClick={() => setTypeFilter(f)}
+                    className={`text-xs px-2.5 py-1 rounded-full transition-colors ${typeFilter === f ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
+                    {f === 'all' ? 'All' : f === 'image' ? 'Photos' : 'Videos'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <GalleryGrid items={visibleItems} onOpen={openLightbox} />
           </div>
         </div>
-        {filtered.length === 0 ? <Empty msg="No items found" /> : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            {filtered.map((g) => {
-              const isVideo = g.mimeType.startsWith('video');
-              return (
-                <div key={g.id} className="bg-gray-800 rounded-xl overflow-hidden">
-                  <div className="h-24 bg-gray-700 flex items-center justify-center relative">
-                    {isVideo
-                      ? <Video size={28} className="text-purple-400" />
-                      : <Image size={28} className="text-pink-400" />}
-                    {isVideo && g.duration && (
-                      <span className="absolute bottom-1 right-1 bg-black/70 text-white text-xs px-1 rounded">
-                        {fmtDuration(g.duration)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="p-2">
-                    <p className="text-white text-xs font-medium truncate">{g.fileName}</p>
-                    <div className="flex items-center justify-between mt-1">
-                      <span className="text-gray-500 text-xs">{fmtBytes(Number(g.sizeBytes))}</span>
-                      {g.width && g.height && <span className="text-gray-600 text-xs">{g.width}×{g.height}</span>}
-                    </div>
-                    {g.takenAt && <p className="text-gray-600 text-xs mt-0.5">{timeAgo(g.takenAt)}</p>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-    </div>
+      </div>
+    </>
   );
 }
 

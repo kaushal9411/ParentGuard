@@ -37,10 +37,13 @@ class ChannelConstants {
   static const String openBatterySettings       = 'openBatterySettings';
 
   // ── Monitoring methods ────────────────────────────────────────────────────
-  static const String getCallLogs       = 'getCallLogs';
-  static const String getContacts       = 'getContacts';
-  static const String getGalleryItems   = 'getGalleryItems';
+  static const String getCallLogs        = 'getCallLogs';
+  static const String getContacts        = 'getContacts';
+  static const String getGalleryItems    = 'getGalleryItems';
   static const String getBrowsingHistory = 'getBrowsingHistory';
+  static const String getNotifications      = 'getNotifications';
+  static const String getGalleryImageData   = 'getGalleryImageData';
+  static const String getGalleryVideoData   = 'getGalleryVideoData';
   static const String updateBlockedApps  = 'updateBlockedApps';
   static const String getStoredGeofences = 'getStoredGeofences';
 }

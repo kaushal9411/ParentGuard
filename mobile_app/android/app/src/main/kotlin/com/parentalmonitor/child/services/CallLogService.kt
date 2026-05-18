@@ -18,28 +18,34 @@ class CallLogService(private val ctx: Context) {
                 CallLog.Calls.TYPE,
                 CallLog.Calls.DURATION,
                 CallLog.Calls.DATE,
-                CallLog.Calls.PHONE_ACCOUNT_ID,
             )
             val selection = if (sinceTimestamp > 0) "${CallLog.Calls.DATE} > ?" else null
             val selArgs   = if (sinceTimestamp > 0) arrayOf(sinceTimestamp.toString()) else null
 
+            // NOTE: Do NOT put LIMIT inside the sortOrder string — it is not
+            // part of the ContentProvider API and throws on many Android versions.
+            // Limit the result manually during cursor iteration instead.
             ctx.contentResolver.query(
-                CallLog.Calls.CONTENT_URI, projection, selection, selArgs,
-                "${CallLog.Calls.DATE} DESC LIMIT 200",
+                CallLog.Calls.CONTENT_URI,
+                projection,
+                selection,
+                selArgs,
+                "${CallLog.Calls.DATE} DESC",
             )?.use { cursor ->
-                val numberIdx   = cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER)
-                val nameIdx     = cursor.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME)
-                val typeIdx     = cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE)
-                val durIdx      = cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION)
-                val dateIdx     = cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)
+                val numberIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER)
+                val nameIdx   = cursor.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME)
+                val typeIdx   = cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE)
+                val durIdx    = cursor.getColumnIndexOrThrow(CallLog.Calls.DURATION)
+                val dateIdx   = cursor.getColumnIndexOrThrow(CallLog.Calls.DATE)
 
-                while (cursor.moveToNext()) {
+                var count = 0
+                while (cursor.moveToNext() && count < 200) {
                     val callType = when (cursor.getInt(typeIdx)) {
-                        CallLog.Calls.INCOMING_TYPE  -> "incoming"
-                        CallLog.Calls.OUTGOING_TYPE  -> "outgoing"
-                        CallLog.Calls.MISSED_TYPE    -> "missed"
-                        CallLog.Calls.REJECTED_TYPE  -> "rejected"
-                        else                         -> "missed"
+                        CallLog.Calls.INCOMING_TYPE -> "incoming"
+                        CallLog.Calls.OUTGOING_TYPE -> "outgoing"
+                        CallLog.Calls.MISSED_TYPE   -> "missed"
+                        CallLog.Calls.REJECTED_TYPE -> "rejected"
+                        else                        -> "missed"
                     }
                     result.put(JSONObject().apply {
                         put("id",        UUID.randomUUID().toString())
@@ -49,9 +55,12 @@ class CallLogService(private val ctx: Context) {
                         put("duration",  cursor.getInt(durIdx))
                         put("timestamp", cursor.getLong(dateIdx))
                     })
+                    count++
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.e("CallLogService", "Failed to read call log: ${e.message}", e)
+        }
         return result.toString()
     }
 }

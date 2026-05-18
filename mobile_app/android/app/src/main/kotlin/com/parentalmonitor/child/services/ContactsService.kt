@@ -32,7 +32,9 @@ class ContactsService(private val ctx: Context) {
                     })
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.e("ContactsService", "Failed to read contacts: ${e.message}", e)
+        }
         return result.toString()
     }
 

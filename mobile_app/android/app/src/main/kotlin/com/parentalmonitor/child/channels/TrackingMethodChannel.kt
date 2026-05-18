@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import com.parentalmonitor.child.services.AppUsageService
+import com.parentalmonitor.child.listeners.NotificationMonitorService
 import com.parentalmonitor.child.services.BrowsingHistoryService
 import com.parentalmonitor.child.services.CallLogService
 import com.parentalmonitor.child.services.ContactsService
@@ -123,17 +124,32 @@ class TrackingMethodChannel(
     private fun onMonitoring(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "getCallLogs" -> {
-                val since = call.argument<Long>("sinceTimestamp") ?: 0L
+                val since = (call.argument<Any>("sinceTimestamp") as? Number)?.toLong() ?: 0L
                 result.success(callLogSvc.getCallLogs(since))
             }
             "getContacts" -> result.success(contactsSvc.getContacts())
             "getGalleryItems" -> {
-                val since = call.argument<Long>("sinceTimestamp") ?: 0L
+                val since = (call.argument<Any>("sinceTimestamp") as? Number)?.toLong() ?: 0L
                 result.success(gallerySvc.getGalleryItems(since))
             }
+            "getGalleryImageData" -> {
+                val itemId = call.argument<String>("itemId") ?: ""
+                result.success(gallerySvc.getImageData(itemId))
+            }
+            "getGalleryVideoData" -> {
+                val itemId = call.argument<String>("itemId") ?: ""
+                result.success(gallerySvc.getRawVideoData(itemId))
+            }
             "getBrowsingHistory" -> {
-                val since = call.argument<Long>("sinceTimestamp") ?: 0L
+                val since = (call.argument<Any>("sinceTimestamp") as? Number)?.toLong() ?: 0L
                 result.success(browsingSvc.getBrowsingHistory(since))
+            }
+            "getNotifications" -> {
+                val prefs = ctx.getSharedPreferences(
+                    NotificationMonitorService.PREFS_KEY, Context.MODE_PRIVATE)
+                val json = prefs.getString(NotificationMonitorService.KEY_QUEUE, "[]") ?: "[]"
+                prefs.edit().putString(NotificationMonitorService.KEY_QUEUE, "[]").apply()
+                result.success(json)
             }
             "updateBlockedApps" -> {
                 val packages = call.argument<List<String>>("packages") ?: emptyList()

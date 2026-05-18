@@ -35,7 +35,8 @@ export async function ingestEvents(
     try {
       await ingestOne(deviceId, event);
       processed++;
-    } catch {
+    } catch (err) {
+      console.error(`[ingest] rejected ${event.type} id=${event.id}:`, err);
       failed++;
     }
   }
@@ -91,7 +92,8 @@ async function ingestOne(deviceId: string, event: RawEvent): Promise<void> {
           appName:         p.appName         as string,
           usageDurationMs: BigInt(p.usageDurationMs as number),
           launchCount:     (p.launchCount    as number) ?? 0,
-          lastUsed:        new Date(p.lastUsed  as string),
+          // lastUsed is not always sent by the client; fall back to capturedAt
+          lastUsed:        new Date((p.lastUsed ?? p.capturedAt) as string),
           capturedAt:      new Date(p.capturedAt as string),
           category:        (p.category as string) ?? null,
         },
@@ -171,7 +173,9 @@ async function ingestOne(deviceId: string, event: RawEvent): Promise<void> {
     case 'galleryItem':
       await prisma.galleryItem.upsert({
         where:  { id: event.id },
-        update: {},
+        update: {
+          thumbnail: (p.thumbnail as string) || null,
+        },
         create: {
           id:        event.id,
           deviceId,
@@ -184,6 +188,7 @@ async function ingestOne(deviceId: string, event: RawEvent): Promise<void> {
           takenAt:   p.takenAt ? new Date(p.takenAt as string) : null,
           localPath: (p.localPath as string)  ?? null,
           album:     (p.album     as string)  ?? null,
+          thumbnail: (p.thumbnail as string)  || null,
         },
       });
       break;

@@ -35,18 +35,20 @@ class TrackingForegroundService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private lateinit var locationSvc: LocationService
-    private lateinit var deviceSvc:   DeviceService
-    private lateinit var commandSvc:  RemoteCommandService
+    private lateinit var locationSvc:      LocationService
+    private lateinit var deviceSvc:        DeviceService
+    private lateinit var commandSvc:       RemoteCommandService
+    private lateinit var notificationSvc:  NotificationSyncService
 
     private var slowTick = 0
 
     override fun onCreate() {
         super.onCreate()
-        locationSvc = LocationService(this)
-        deviceSvc   = DeviceService(this)
-        commandSvc  = RemoteCommandService(this, AppConstants.backendBaseUrl)
-        isRunning   = true
+        locationSvc     = LocationService(this)
+        deviceSvc       = DeviceService(this)
+        commandSvc      = RemoteCommandService(this, AppConstants.backendBaseUrl)
+        notificationSvc = NotificationSyncService(this, AppConstants.backendBaseUrl)
+        isRunning       = true
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -97,17 +99,18 @@ class TrackingForegroundService : Service() {
             safeRun { commandSvc.pollAndExecute(token, deviceId) }
             safeRun { commandSvc.syncGeofences(token, deviceId) }
             safeRun { commandSvc.syncAppBlocks(token, deviceId) }
+            safeRun { notificationSvc.uploadPending(token, deviceId) }
         }
     }
 
     /** Runs every 30 minutes — heavier content providers */
     private fun runSlowCapture() {
-        // These are driven by Flutter's MonitoringService via MethodChannel.
-        // The ForegroundService just signals Flutter that a slow cycle is due
-        // by bumping a SharedPreferences timestamp.
-        getSharedPreferences(PREFS_TRACKING, MODE_PRIVATE)
+        // Signal Flutter's MonitoringService that a slow cycle is due.
+        // Must write to FlutterSharedPreferences with the flutter. prefix
+        // so that Flutter's SharedPreferences.getInt('slow_cycle_ts') finds it.
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
             .edit()
-            .putLong(KEY_SLOW_CYCLE_TS, System.currentTimeMillis())
+            .putLong("flutter.$KEY_SLOW_CYCLE_TS", System.currentTimeMillis())
             .apply()
     }
 

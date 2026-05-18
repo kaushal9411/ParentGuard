@@ -192,6 +192,8 @@ model GalleryItem {
   takenAt   DateTime? @map("taken_at")
   localPath String?   @map("local_path") // path on device storage
   album     String?   // album/folder name
+  thumbnail String?   // base64-encoded JPEG thumbnail (~200x200) for grid
+  imageUrl  String?   @map("image_url") // served URL to full-size image on disk
   syncedAt  DateTime  @default(now()) @map("synced_at")
 
   @@index([deviceId, takenAt(sort: Desc)])
