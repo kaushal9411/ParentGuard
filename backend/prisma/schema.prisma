@@ -10,15 +10,27 @@ datasource db {
 // ── Users ────────────────────────────────────────────────────────────────────
 
 model User {
-  id           String   @id @default(uuid())
+  id           String     @id @default(uuid())
   name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  role         UserRole @default(child)
-  createdAt    DateTime @default(now()) @map("created_at")
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         UserRole   @default(child)
+  createdAt    DateTime   @default(now()) @map("created_at")
   devices      Device[]
+  fcmTokens    FcmToken[]
 
   @@map("users")
+}
+
+model FcmToken {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@map("fcm_tokens")
 }
 
 enum UserRole {
@@ -34,7 +46,7 @@ model Device {
   deviceId     String     @unique @map("device_id")
   name         String
   userId       String     @map("user_id")
-  user         User       @relation(fields: [userId], references: [id])
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   role         DeviceRole
   isOnline     Boolean    @default(false) @map("is_online")
   lastSeen     DateTime?  @map("last_seen")
@@ -66,7 +78,7 @@ enum DeviceRole {
 model LocationLog {
   id           String   @id
   deviceId     String   @map("device_id")
-  device       Device   @relation(fields: [deviceId], references: [deviceId])
+  device       Device   @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
   latitude     Float
   longitude    Float
   accuracy     Float?

@@ -3,6 +3,14 @@ import { useEffect, useState, useCallback } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
+const VIDEO_EXTS = ['.mp4', '.3gp', '.3g2', '.mpeg', '.mov', '.webm', '.avi'];
+
+function isVideoUrl(url: string | null): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return VIDEO_EXTS.some((ext) => lower.endsWith(ext));
+}
+
 function galleryImgSrc(item: { imageUrl: string | null; thumbnail: string | null }): string | null {
   if (item.imageUrl) return `${API_URL}${item.imageUrl}`;
   if (item.thumbnail) return `data:image/jpeg;base64,${item.thumbnail}`;
@@ -35,7 +43,7 @@ interface UsageLog { id: string; appName: string; packageName: string; usageDura
 interface CallLog { id: string; number: string; name: string | null; type: string; duration: number; timestamp: string; }
 interface Contact { id: string; name: string; phones: string; emails: string; }
 interface GalleryItem { id: string; fileName: string; mimeType: string; sizeBytes: string; width: number | null; height: number | null; duration: number | null; takenAt: string | null; thumbnail: string | null; imageUrl: string | null; album: string | null; }
-interface BrowsingItem { id: string; url: string; title: string | null; visitedAt: string; }
+interface BrowsingItem { id: string; url: string; title: string | null; visitedAt: string; browserApp: string | null; visitCount: number | null; }
 interface StatusLog { batteryLevel: number; isCharging: boolean; networkType: string; isConnected: boolean; wifiSsid: string | null; signalStrength: number | null; capturedAt: string; }
 
 interface UserDetail {
@@ -132,7 +140,13 @@ function CallTypeBadge({ type }: { type: string }) {
 }
 
 // ─── Tab: Overview ────────────────────────────────────────────────────────────
-function OverviewTab({ data }: { data: UserDetail }) {
+function OverviewTab({
+  data,
+  onDeviceDelete,
+}: {
+  data: UserDetail;
+  onDeviceDelete: (deviceId: string, name: string) => void;
+}) {
   const { user, devices, latestStatus } = data;
 
   const totals = {
@@ -226,6 +240,13 @@ function OverviewTab({ data }: { data: UserDetail }) {
                       {d.isOnline
                         ? <span className="flex items-center gap-1 text-green-400 text-xs"><Wifi size={11} /> Online</span>
                         : <span className="flex items-center gap-1 text-gray-500 text-xs"><WifiOff size={11} /> Offline</span>}
+                      <button
+                        onClick={() => onDeviceDelete(d.deviceId, d.name)}
+                        className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/40 px-2 py-1 rounded-lg transition-colors"
+                        title="Remove device and all its data"
+                      >
+                        <Trash2 size={11} /> Remove
+                      </button>
                     </div>
                   </div>
                   <div className="grid grid-cols-4 gap-2 text-xs text-center">
@@ -500,7 +521,7 @@ function GalleryLightbox({
         )}
 
         {isVideo ? (
-          item.imageUrl ? (
+          isVideoUrl(item.imageUrl) ? (
             <video
               key={item.id}
               src={`${API_URL}${item.imageUrl}`}
@@ -515,12 +536,11 @@ function GalleryLightbox({
               <img
                 src={galleryImgSrc(item)!}
                 alt={item.fileName}
-                className="max-w-full max-h-full object-contain rounded-lg select-none opacity-60"
+                className="max-w-full max-h-full object-contain rounded-lg select-none"
                 style={{ maxHeight: 'calc(100vh - 160px)' }}
               />
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-300">
-                <Video size={48} />
-                <p className="text-sm">Video not yet uploaded</p>
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/70 text-gray-300 text-xs px-3 py-1 rounded-full flex items-center gap-1.5">
+                <Video size={12} /> Video preview — full file uploading in background
               </div>
             </div>
           ) : (
@@ -839,46 +859,165 @@ function UsageTab({ data }: { data: UserDetail }) {
 }
 
 // ─── Tab: Browsing History ────────────────────────────────────────────────────
+const BROWSER_LABELS: Record<string, string> = {
+  'com.android.chrome':            'Chrome',
+  'com.chrome.beta':               'Chrome Beta',
+  'com.chrome.dev':                'Chrome Dev',
+  'com.chrome.canary':             'Chrome Canary',
+  'org.mozilla.firefox':           'Firefox',
+  'org.mozilla.firefox_beta':      'Firefox Beta',
+  'org.mozilla.fenix':             'Firefox',
+  'org.mozilla.fennec_aurora':     'Firefox Aurora',
+  'com.brave.browser':             'Brave',
+  'com.microsoft.emmx':            'Edge',
+  'com.opera.browser':             'Opera',
+  'com.opera.mini.native':         'Opera Mini',
+  'com.sec.android.app.sbrowser':  'Samsung Browser',
+  'com.duckduckgo.mobile.android': 'DuckDuckGo',
+  'com.kiwibrowser.browser':       'Kiwi',
+  'com.vivaldi.browser':           'Vivaldi',
+  'com.android.browser':           'Browser',
+};
+
+const BROWSER_COLORS: Record<string, string> = {
+  'Chrome':          'text-yellow-400 bg-yellow-900/20',
+  'Chrome Beta':     'text-yellow-400 bg-yellow-900/20',
+  'Firefox':         'text-orange-400 bg-orange-900/20',
+  'Brave':           'text-orange-300 bg-orange-900/20',
+  'Edge':            'text-blue-400 bg-blue-900/20',
+  'Opera':           'text-red-400 bg-red-900/20',
+  'Opera Mini':      'text-red-400 bg-red-900/20',
+  'Samsung Browser': 'text-blue-300 bg-blue-900/20',
+  'DuckDuckGo':      'text-green-400 bg-green-900/20',
+};
+
+function browserLabel(pkg: string | null): string {
+  if (!pkg) return 'Browser';
+  return BROWSER_LABELS[pkg] ?? pkg.split('.').pop() ?? 'Browser';
+}
+function browserColor(name: string): string {
+  return BROWSER_COLORS[name] ?? 'text-indigo-400 bg-indigo-900/20';
+}
+
 function BrowsingTab({ data }: { data: UserDetail }) {
   const { browsingHistory } = data;
-  const [search, setSearch] = useState('');
-  const filtered = browsingHistory.filter((b) =>
-    b.url.toLowerCase().includes(search.toLowerCase()) ||
-    (b.title ?? '').toLowerCase().includes(search.toLowerCase())
-  );
+  const [browser, setBrowser] = useState('__all__');
+  const [search, setSearch]   = useState('');
+
+  // Build browser → entries map
+  const browserMap = browsingHistory.reduce<Record<string, typeof browsingHistory>>((acc, b) => {
+    const name = browserLabel(b.browserApp ?? null);
+    (acc[name] ??= []).push(b);
+    return acc;
+  }, {});
+  const browsers = Object.entries(browserMap).sort((a, b) => b[1].length - a[1].length);
+
+  const base    = browser === '__all__' ? browsingHistory : (browserMap[browser] ?? []);
+  const q       = search.toLowerCase();
+  const visible = q
+    ? base.filter((b) => b.url.toLowerCase().includes(q) || (b.title ?? '').toLowerCase().includes(q))
+    : base;
+
+  // Unique domains in visible set
+  const uniqueDomains = new Set(visible.map((b) => { try { return new URL(b.url).hostname; } catch { return b.url; } })).size;
 
   return (
-    <Card className="p-6">
-      <div className="flex items-center gap-3 mb-5">
-        <SectionHeader icon={<Globe size={18} />} title="Browsing History" count={browsingHistory.length} />
-        <div className="ml-auto relative">
-          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search URLs…"
-            className="bg-gray-800 border border-gray-700 rounded-lg pl-7 pr-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 w-48" />
+    <div className="space-y-4">
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: 'Total Visits',    value: browsingHistory.length },
+          { label: 'Unique Domains',  value: uniqueDomains },
+          { label: 'Browsers',        value: browsers.length },
+        ].map((s) => (
+          <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-center">
+            <p className="text-2xl font-extrabold text-white">{s.value}</p>
+            <p className="text-gray-400 text-xs mt-0.5">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-5">
+        {/* Browser sidebar */}
+        <div className="flex-shrink-0 w-44">
+          <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2 px-1">Browsers</p>
+          <div className="space-y-1">
+            <button
+              onClick={() => setBrowser('__all__')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${browser === '__all__' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                <Globe size={13} className="flex-shrink-0" />
+                <span className="truncate">All Browsers</span>
+              </span>
+              <span className={`text-xs flex-shrink-0 ml-1 ${browser === '__all__' ? 'text-indigo-200' : 'text-gray-600'}`}>{browsingHistory.length}</span>
+            </button>
+            {browsers.map(([name, items]) => (
+              <button
+                key={name}
+                onClick={() => setBrowser(name)}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${browser === name ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${browserColor(name)}`}>
+                    {name.charAt(0)}
+                  </span>
+                  <span className="truncate">{name}</span>
+                </span>
+                <span className={`text-xs flex-shrink-0 ml-1 ${browser === name ? 'text-indigo-200' : 'text-gray-600'}`}>{items.length}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* History list */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-white font-bold text-sm">
+              {browser === '__all__' ? 'All Browsers' : browser}
+              <span className="text-gray-500 font-normal ml-2 text-xs">{visible.length} visits</span>
+            </h3>
+            <div className="relative">
+              <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search URLs…"
+                className="bg-gray-800 border border-gray-700 rounded-lg pl-7 pr-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 w-44" />
+            </div>
+          </div>
+
+          <Card className="overflow-hidden">
+            {visible.length === 0 ? <div className="p-6"><Empty msg="No history found" /></div> : (
+              <div className="divide-y divide-gray-800/50 max-h-[600px] overflow-y-auto">
+                {visible.map((b) => {
+                  let domain = '';
+                  try { domain = new URL(b.url).hostname; } catch {}
+                  const bName  = browserLabel(b.browserApp ?? null);
+                  const bColor = browserColor(bName);
+                  return (
+                    <div key={b.id} className="px-4 py-3 flex items-start gap-3 hover:bg-gray-800/30 transition-colors">
+                      <div className="w-7 h-7 bg-blue-900/20 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <Globe size={13} className="text-blue-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium truncate">{b.title ?? domain}</p>
+                        <p className="text-gray-500 text-xs truncate">{b.url}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${bColor}`}>{bName}</span>
+                          {(b.visitCount ?? 1) > 1 && (
+                            <span className="text-gray-600 text-[10px]">{b.visitCount}× visits</span>
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-gray-600 text-xs whitespace-nowrap ml-2 flex-shrink-0">{timeAgo(b.visitedAt)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
-      {filtered.length === 0 ? <Empty msg="No browsing history" /> : (
-        <div className="divide-y divide-gray-800/50">
-          {filtered.map((b) => {
-            let domain = '';
-            try { domain = new URL(b.url).hostname; } catch {}
-            return (
-              <div key={b.id} className="py-3 flex items-start gap-3">
-                <div className="w-7 h-7 bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Globe size={13} className="text-blue-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-white text-sm font-medium truncate">{b.title ?? domain}</p>
-                  <p className="text-gray-500 text-xs truncate">{b.url}</p>
-                </div>
-                <span className="text-gray-600 text-xs whitespace-nowrap ml-2">{timeAgo(b.visitedAt)}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Card>
+    </div>
   );
 }
 
@@ -1149,12 +1288,21 @@ export default function UserDetailPage() {
     adminApi.userDetail(userId, devId ?? undefined)
       .then((r) => {
         setData(r.data);
-        // Only update the device list on initial load (devId not set)
         if (!devId) setAllDevices(r.data.devices ?? []);
       })
       .catch(() => router.push('/admin/users'))
       .finally(() => setLoading(false));
   }, [userId, router]);
+
+  // Auto-refresh when FCM signals new data for this user
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ userId: string }>).detail;
+      if (detail?.userId === userId) fetchData(selectedDeviceId);
+    };
+    window.addEventListener('pm:new-data', handler);
+    return () => window.removeEventListener('pm:new-data', handler);
+  }, [userId, selectedDeviceId, fetchData]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -1162,6 +1310,19 @@ export default function UserDetailPage() {
     setSelectedDeviceId(devId);
     fetchData(devId);
   }, [fetchData]);
+
+  const handleDeviceDelete = useCallback(async (deviceId: string, name: string) => {
+    if (!confirm(`Remove device "${name}" and ALL its data? This cannot be undone.`)) return;
+    try {
+      await adminApi.deleteDevice(deviceId);
+      // If we were viewing this device, reset to all-devices view
+      if (selectedDeviceId === deviceId) setSelectedDeviceId(null);
+      setAllDevices((prev) => prev.filter((d) => d.deviceId !== deviceId));
+      fetchData(selectedDeviceId === deviceId ? null : selectedDeviceId);
+    } catch {
+      alert('Failed to remove device.');
+    }
+  }, [selectedDeviceId, fetchData]);
 
   const handleDelete = useCallback(async () => {
     if (!confirm('Permanently delete this user and ALL their data? This cannot be undone.')) return;
@@ -1194,7 +1355,7 @@ export default function UserDetailPage() {
   );
 
   const tabContent: Record<Tab, React.ReactNode> = {
-    overview:      <OverviewTab data={data} />,
+    overview:      <OverviewTab data={data} onDeviceDelete={handleDeviceDelete} />,
     location:      <LocationTab data={data} />,
     calls:         <CallsTab data={data} />,
     contacts:      <ContactsTab data={data} />,

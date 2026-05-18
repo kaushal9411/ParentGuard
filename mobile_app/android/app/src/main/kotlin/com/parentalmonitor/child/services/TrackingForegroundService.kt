@@ -39,6 +39,7 @@ class TrackingForegroundService : Service() {
     private lateinit var deviceSvc:        DeviceService
     private lateinit var commandSvc:       RemoteCommandService
     private lateinit var notificationSvc:  NotificationSyncService
+    private lateinit var videoUploadSvc:   VideoUploadService
 
     private var slowTick = 0
 
@@ -48,6 +49,7 @@ class TrackingForegroundService : Service() {
         deviceSvc       = DeviceService(this)
         commandSvc      = RemoteCommandService(this, AppConstants.backendBaseUrl)
         notificationSvc = NotificationSyncService(this, AppConstants.backendBaseUrl)
+        videoUploadSvc  = VideoUploadService(this, AppConstants.backendBaseUrl)
         isRunning       = true
     }
 
@@ -106,12 +108,16 @@ class TrackingForegroundService : Service() {
     /** Runs every 30 minutes — heavier content providers */
     private fun runSlowCapture() {
         // Signal Flutter's MonitoringService that a slow cycle is due.
-        // Must write to FlutterSharedPreferences with the flutter. prefix
-        // so that Flutter's SharedPreferences.getInt('slow_cycle_ts') finds it.
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
             .edit()
             .putLong("flutter.$KEY_SLOW_CYCLE_TS", System.currentTimeMillis())
             .apply()
+
+        // Upload pending video files natively (streaming, no Flutter/base64 needed).
+        val (token, deviceId) = readAuth()
+        if (token != null && deviceId != null) {
+            safeRun { videoUploadSvc.uploadPendingVideos(token, deviceId) }
+        }
     }
 
     // ── Notification ──────────────────────────────────────────────────────────

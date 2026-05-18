@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth';
 import { ingestEvents, RawEvent } from '../services/eventIngestion';
+import { sendNewDataPush } from '../config/firebase';
 
 const router = Router();
 
@@ -32,6 +33,10 @@ router.post('/batch', authenticate, async (req, res) => {
 
   const { deviceId, events } = parsed.data;
   const result = await ingestEvents(deviceId, req.auth.userId, events as RawEvent[]);
+
+  // Fire-and-forget: push notification to parent's browser(s)
+  sendNewDataPush(req.auth.userId, deviceId);
+
   res.json(result);
 });
 

@@ -45,7 +45,49 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage> {
     if (mounted) setState(() => _serviceRunning = running);
   }
 
+  Future<void> _confirmRemoveDevice(BuildContext context) async {
+    final nav = Navigator.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Remove This Device',
+            style: TextStyle(fontWeight: FontWeight.w700, color: Colors.red)),
+        content: const Text(
+          'This will permanently delete this device and ALL collected data '
+          '(location, calls, gallery, browsing history, etc.) from the server.\n\n'
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Remove Device'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await TrackingChannel.instance.stopTrackingService();
+      await AuthService(AppConstants.backendBaseUrl).removeDevice();
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const WelcomePage()),
+        (_) => false,
+      );
+    }
+  }
+
   Future<void> _confirmLogout(BuildContext context) async {
+    final nav = Navigator.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -73,13 +115,10 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage> {
     if (confirmed == true && mounted) {
       await TrackingChannel.instance.stopTrackingService();
       await AuthService(AppConstants.backendBaseUrl).logout();
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const WelcomePage()),
-          (_) => false,
-        );
-      }
+      nav.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const WelcomePage()),
+        (_) => false,
+      );
     }
   }
 
@@ -133,6 +172,8 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage> {
             const _UsageCard(),
             const SizedBox(height: 12),
             const _PermissionsCard(),
+            const SizedBox(height: 12),
+            _DangerCard(onRemoveDevice: () => _confirmRemoveDevice(context)),
           ],
         ),
       ),
@@ -398,6 +439,61 @@ class _PermissionsCard extends ConsumerWidget {
                 onPressed: permSvc.openAccessibilitySettings,
                 child: const Text('Grant'),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DangerCard extends StatelessWidget {
+  const _DangerCard({required this.onRemoveDevice});
+
+  final VoidCallback onRemoveDevice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.red.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.red.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_rounded, color: Colors.red.shade700, size: 18),
+                const SizedBox(width: 8),
+                Text('Danger Zone',
+                    style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.red.shade700)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.delete_forever_rounded),
+                label: const Text('Remove This Device'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red.shade700,
+                  side: BorderSide(color: Colors.red.shade400),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: onRemoveDevice,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Permanently removes this device and deletes all collected data from the server.',
+              style: TextStyle(fontSize: 11, color: Colors.red.shade600),
             ),
           ],
         ),

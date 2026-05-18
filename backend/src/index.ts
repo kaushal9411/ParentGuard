@@ -15,6 +15,7 @@ import usageRouter from './routes/usage';
 import notificationsRouter from './routes/notifications';
 import commandsRouter from './routes/commands';
 import galleryRouter, { GALLERY_UPLOADS_DIR } from './routes/gallery';
+import fcmRouter from './routes/fcm';
 
 const app = express();
 const httpServer = createServer(app);
@@ -45,6 +46,7 @@ app.use('/api/usage', usageRouter);
 app.use('/api/notifications', notificationsRouter);
 app.use('/api/commands',     commandsRouter);
 app.use('/api/gallery',      galleryRouter);
+app.use('/api/fcm',          fcmRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

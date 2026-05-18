@@ -1,9 +1,12 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import fs from 'fs/promises';
+import path from 'path';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
+import { GALLERY_UPLOADS_DIR } from './gallery';
 
 const router  = Router();
 const JWT_SEC = process.env.JWT_SECRET ?? 'dev_secret';
@@ -154,7 +157,7 @@ router.get('/users/:userId', authenticate, requireAdmin, async (req, res) => {
       where: dWhere, orderBy: { syncedAt: 'desc' }, take: 1000,
     }),
     prisma.browsingHistory.findMany({
-      where: dWhere, orderBy: { visitedAt: 'desc' }, take: 50,
+      where: dWhere, orderBy: { visitedAt: 'desc' }, take: 2000,
     }),
     prisma.deviceStatusLog.findFirst({
       where: dWhere, orderBy: { capturedAt: 'desc' },
@@ -226,31 +229,47 @@ router.get('/users/:userId/gallery', authenticate, requireAdmin, async (req, res
   res.json(items.map((g) => ({ ...g, sizeBytes: g.sizeBytes.toString() })));
 });
 
+// helper — delete all uploaded gallery files for a list of deviceIds
+async function deleteGalleryFiles(deviceIds: string[]): Promise<void> {
+  await Promise.all(
+    deviceIds.map((id) =>
+      fs.rm(path.join(GALLERY_UPLOADS_DIR, id), { recursive: true, force: true }),
+    ),
+  );
+}
+
 // ── DELETE /api/admin/users/:userId ──────────────────────────────────────────
 router.delete('/users/:userId', authenticate, requireAdmin, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.params.userId as string } });
-  if (!user || user.role === 'admin') { res.status(404).json({ error: 'User not found' }); return; }
+  if (!user || user.role === 'admin') {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
 
-  const deviceIds = (await prisma.device.findMany({
-    where: { userId: user.id }, select: { deviceId: true },
-  })).map((d) => d.deviceId);
+  const deviceIds = (
+    await prisma.device.findMany({ where: { userId: user.id }, select: { deviceId: true } })
+  ).map((d) => d.deviceId);
 
-  await prisma.$transaction([
-    prisma.locationLog.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.appUsageLog.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.notificationLog.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.deviceStatusLog.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.callLog.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.contact.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.galleryItem.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.browsingHistory.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.remoteCommand.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.geofenceAlert.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.geofence.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.appBlockRule.deleteMany({ where: { deviceId: { in: deviceIds } } }),
-    prisma.device.deleteMany({ where: { userId: user.id } }),
-    prisma.user.delete({ where: { id: user.id } }),
-  ]);
+  // Delete uploaded gallery files from disk first, then the DB row.
+  // CASCADE deletes on the DB handle every child table automatically.
+  await deleteGalleryFiles(deviceIds);
+  await prisma.user.delete({ where: { id: user.id } });
+
+  res.json({ ok: true });
+});
+
+// ── DELETE /api/admin/devices/:deviceId ───────────────────────────────────────
+router.delete('/devices/:deviceId', authenticate, requireAdmin, async (req, res) => {
+  const deviceId = String(req.params.deviceId);
+
+  const device = await prisma.device.findUnique({ where: { deviceId } });
+  if (!device) {
+    res.status(404).json({ error: 'Device not found' });
+    return;
+  }
+
+  await deleteGalleryFiles([deviceId]);
+  await prisma.device.delete({ where: { deviceId } });
 
   res.json({ ok: true });
 });

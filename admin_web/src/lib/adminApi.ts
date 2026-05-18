@@ -49,6 +49,9 @@ export const adminApi = {
   deleteUser: (userId: string) =>
     adminAxios.delete(`/api/admin/users/${userId}`),
 
+  deleteDevice: (deviceId: string) =>
+    adminAxios.delete(`/api/admin/devices/${deviceId}`),
+
   // ── Remote commands ──────────────────────────────────────────────────────
   issueCommand: (deviceId: string, commandType: string, payload?: Record<string, unknown>) =>
     adminAxios.post(`/api/admin/devices/${deviceId}/commands`, { commandType, payload }),

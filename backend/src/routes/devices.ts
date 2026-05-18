@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import fs from 'fs/promises';
+import path from 'path';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth';
+import { GALLERY_UPLOADS_DIR } from './gallery';
 
 const router = Router();
 
@@ -71,6 +74,25 @@ router.patch('/:deviceId/status', authenticate, async (req, res) => {
     res.status(404).json({ error: 'Device not found' });
     return;
   }
+  res.json({ ok: true });
+});
+
+// DELETE /api/devices/:deviceId — device removes itself (or user removes own device)
+router.delete('/:deviceId', authenticate, async (req, res) => {
+  const deviceId = String(req.params.deviceId);
+
+  const device = await prisma.device.findFirst({
+    where: { deviceId, userId: req.auth.userId },
+  });
+  if (!device) {
+    res.status(404).json({ error: 'Device not found' });
+    return;
+  }
+
+  // Clean up uploaded gallery files then let CASCADE handle all DB rows
+  await fs.rm(path.join(GALLERY_UPLOADS_DIR, deviceId), { recursive: true, force: true });
+  await prisma.device.delete({ where: { deviceId } });
+
   res.json({ ok: true });
 });
 

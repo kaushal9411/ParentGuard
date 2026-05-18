@@ -29,9 +29,14 @@ class AppConstants {
   static const String prefTrackingEnabled = 'pref_tracking_enabled';
 
   // ── Backend ───────────────────────────────────────────────────────────────
-  // 10.0.2.2 = emulator loopback; use your PC's WiFi IP for a real device.
-  // Current PC WiFi IP: 172.20.10.2
-  static const String backendBaseUrl = 'http://172.20.10.2:3000';
+  // Controlled via --dart-define=BACKEND_URL=<url> at build/run time.
+  // VS Code launch.json has two presets: "Emulator" and "Device".
+  // Emulator loopback : http://10.0.2.2:3000
+  // Physical device   : http://172.20.10.2:3000  (your PC's WiFi IP)
+  static const String backendBaseUrl = String.fromEnvironment(
+    'BACKEND_URL',
+    defaultValue: 'http://172.20.10.2:3000',
+  );
 
   // ── Data retention (days) ─────────────────────────────────────────────────
   static const int locationRetentionDays = 30;

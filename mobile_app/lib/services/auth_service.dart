@@ -143,6 +143,22 @@ class AuthService {
     await TokenStore.clear();
   }
 
+  // ── Remove device (deletes all data from server) ─────────────────────────────
+
+  Future<void> removeDevice() async {
+    final deviceId = await DeviceIdUtil.get();
+    final token    = await TokenStore.getToken();
+    try {
+      await _dio.delete(
+        '/api/devices/$deviceId',
+        options: Options(headers: {'Authorization': 'Bearer ${token ?? ''}'}),
+      );
+    } catch (_) {
+      // Best-effort — clear locally even if server call fails
+    }
+    await TokenStore.clear();
+  }
+
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
   Future<String> _getDeviceName() async {

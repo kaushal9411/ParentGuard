@@ -1,11 +1,16 @@
 'use client';
+import { useEffect, useState } from 'react';
 import { Bell, User } from 'lucide-react';
 import { getUser } from '@/lib/auth';
 
 interface Props { title: string; subtitle?: string; }
 
 export default function Header({ title, subtitle }: Props) {
-  const user = getUser<{ name: string; email: string }>();
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+
+  useEffect(() => {
+    setUser(getUser<{ name: string; email: string }>());
+  }, []);
 
   return (
     <header className="bg-white border-b border-gray-100 px-8 py-4 flex items-center justify-between">
@@ -25,7 +30,7 @@ export default function Header({ title, subtitle }: Props) {
             <User size={18} className="text-white" />
           </div>
           <div>
-            <p className="text-sm font-semibold text-gray-900 leading-none">{user?.name ?? 'Parent'}</p>
+            <p className="text-sm font-semibold text-gray-900 leading-none">{user?.name ?? ''}</p>
             <p className="text-xs text-gray-500 mt-0.5">{user?.email ?? ''}</p>
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import { authenticate } from '../middleware/auth';
@@ -60,5 +60,62 @@ router.post('/upload/:itemId', authenticate, async (req, res) => {
 
   res.json({ success: true, imageUrl });
 });
+
+// POST /api/gallery/upload-video/:itemId
+// Called by the native Kotlin VideoUploadService (no base64 — raw binary body).
+// Headers: Authorization Bearer, X-Device-Id, Content-Type (video/*)
+// Body: raw binary video data
+router.post(
+  '/upload-video/:itemId',
+  express.raw({ type: () => true, limit: '500mb' }),
+  authenticate,
+  async (req, res) => {
+    const { itemId }  = req.params;
+    const deviceId    = req.headers['x-device-id'] as string | undefined;
+    const mimeType    = (req.headers['content-type'] as string | undefined) ?? 'video/mp4';
+
+    if (!deviceId) {
+      res.status(400).json({ error: 'X-Device-Id header required' });
+      return;
+    }
+
+    if (!(req.body instanceof Buffer) || req.body.length === 0) {
+      res.status(400).json({ error: 'Empty video body' });
+      return;
+    }
+
+    const device = await prisma.device.findFirst({
+      where: { deviceId, userId: req.auth.userId },
+    });
+    if (!device) {
+      res.status(403).json({ error: 'Forbidden' });
+      return;
+    }
+
+    const ext      = MIME_EXT[mimeType.split(';')[0].trim()] ?? '.mp4';
+    const fileName = `${itemId}${ext}`;
+    const dir      = path.join(GALLERY_UPLOADS_DIR, deviceId);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, fileName), req.body as Buffer);
+
+    const imageUrl = `/uploads/gallery/${deviceId}/${fileName}`;
+
+    // Upsert so upload works even if metadata hasn't been ingested yet.
+    await prisma.galleryItem.upsert({
+      where:  { id: String(itemId) },
+      update: { imageUrl },
+      create: {
+        id:        String(itemId),
+        deviceId,
+        fileName,
+        mimeType:  mimeType.split(';')[0].trim(),
+        sizeBytes: BigInt(req.body.length),
+        imageUrl,
+      },
+    });
+
+    res.json({ success: true, imageUrl });
+  },
+);
 
 export default router;

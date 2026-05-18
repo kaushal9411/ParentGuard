@@ -4,6 +4,24 @@ plugins {
     id "dev.flutter.flutter-gradle-plugin"
 }
 
+// Decode --dart-define values passed by `flutter run` so Kotlin services
+// (TrackingForegroundService, NotificationSyncService, etc.) use the same
+// BACKEND_URL as the Flutter/Dart layer. No more duplicate hardcoding.
+def dartDefines = [:]
+if (project.hasProperty('dart-defines')) {
+    project.property('dart-defines').split(',').each { entry ->
+        try {
+            def decoded = new String(entry.bytes.decodeBase64(), 'UTF-8')
+            def idx = decoded.indexOf('=')
+            if (idx >= 0) dartDefines[decoded.substring(0, idx)] = decoded.substring(idx + 1)
+        } catch (ignored) {
+            def idx = entry.indexOf('=')
+            if (idx >= 0) dartDefines[entry.substring(0, idx)] = entry.substring(idx + 1)
+        }
+    }
+}
+def backendUrl = dartDefines.getOrDefault('BACKEND_URL', 'http://172.20.10.2:3000')
+
 android {
     namespace "com.parentalmonitor.child"
     compileSdk 36
@@ -18,12 +36,18 @@ android {
         jvmTarget = "17"
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     defaultConfig {
         applicationId "com.parentalmonitor.child"
         minSdkVersion flutter.minSdkVersion       // Android 6.0 — covers ~99 % of active devices
         targetSdk 36
         versionCode flutter.versionCode
         versionName flutter.versionName
+
+        buildConfigField "String", "BACKEND_URL", "\"${backendUrl}\""
     }
 
     buildTypes {
