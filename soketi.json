@@ -1,0 +1,15 @@
+{
+    "debug": false,
+    "port": 6001,
+    "appManager.driver": "array",
+    "appManager.array.apps": [
+        {
+            "id": "parentguard",
+            "key": "parentguard-key",
+            "secret": "parentguard-secret",
+            "enableClientMessages": false,
+            "enableStatistics": false,
+            "maxConnections": 200
+        }
+    ]
+}

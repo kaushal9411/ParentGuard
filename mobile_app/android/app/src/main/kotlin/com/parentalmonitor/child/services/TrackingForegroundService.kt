@@ -181,7 +181,7 @@ class TrackingForegroundService : Service() {
 
         private const val CHANNEL_ID        = "pm_tracking_channel"
         private const val NOTIFICATION_ID   = 1001
-        private const val FAST_INTERVAL_MS  = 5 * 60 * 1_000L  // 5 min
+        private const val FAST_INTERVAL_MS  = 60 * 1_000L       // 1 min (was 5 min)
         private const val SLOW_EVERY_N_TICKS = 6                // every 30 min
     }
 }

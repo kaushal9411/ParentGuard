@@ -1,5 +1,6 @@
 import { prisma } from '../config/database';
 import { getIO } from '../config/socket';
+// broadcastNewData via Soketi removed — Socket.IO handles real-time (same port, no extra server)
 
 export type EventType =
   | 'location'
@@ -41,20 +42,36 @@ export async function ingestEvents(
     }
   }
 
+  const device = await prisma.device.findFirst({
+    where: { deviceId, userId },
+    select: { name: true },
+  });
+
   await prisma.device.updateMany({
     where: { deviceId, userId },
     data: { lastSeen: new Date(), isOnline: true },
   });
 
+  // Collect unique event types for the push payload
+  const types = [...new Set(events.map((e) => e.type))];
+
+  // 1. Socket.IO — instant if tab is already open and connected
+  const payload = {
+    deviceId,
+    deviceName: device?.name ?? deviceId,
+    userId,
+    types,
+    processed,
+    ts: new Date().toISOString(),
+  };
   try {
-    getIO().to(`parent:${userId}`).emit('device:events', {
-      deviceId,
-      processed,
-      ts: new Date().toISOString(),
-    });
+    const io = getIO();
+    io.to(`parent:${userId}`).emit('device:events', payload);
+    io.to('admin').emit('device:events', payload);        // admin panel room
   } catch {
     // Socket not initialised yet — non-fatal
   }
+
 
   return { processed, failed };
 }

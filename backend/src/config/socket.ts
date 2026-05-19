@@ -9,19 +9,22 @@ export function initSocket(server: HttpServer): Server {
   });
 
   io.on('connection', (socket: Socket) => {
-    // Parent dashboard joins a room keyed by their user ID to receive child events
+    // Parent dashboard joins a room keyed by their user ID
     socket.on('join:parent', (userId: string) => {
       socket.join(`parent:${userId}`);
     });
 
-    // Child device joins its own room (for direct commands in the future)
+    // Admin panel joins a global room — receives ALL device events
+    socket.on('join:admin', () => {
+      socket.join('admin');
+    });
+
+    // Child device joins its own room
     socket.on('join:device', (deviceId: string) => {
       socket.join(`device:${deviceId}`);
     });
 
-    socket.on('disconnect', () => {
-      // rooms are cleaned up automatically
-    });
+    socket.on('disconnect', () => {});
   });
 
   return io;

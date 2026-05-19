@@ -46,6 +46,9 @@ export const adminApi = {
   userGallery: (userId: string, type?: 'image' | 'video', deviceId?: string) =>
     adminAxios.get(`/api/admin/users/${userId}/gallery`, { params: { ...(type ? { type } : {}), ...(deviceId ? { deviceId } : {}) } }),
 
+  allDevices: () =>
+    adminAxios.get('/api/admin/devices'),
+
   deleteUser: (userId: string) =>
     adminAxios.delete(`/api/admin/users/${userId}`),
 

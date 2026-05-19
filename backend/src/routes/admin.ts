@@ -65,6 +65,48 @@ router.get('/stats', authenticate, requireAdmin, async (_req, res) => {
   });
 });
 
+// ── GET /api/admin/devices ────────────────────────────────────────────────────
+// All devices across all users, grouped by user — for the Devices management page.
+router.get('/devices', authenticate, requireAdmin, async (req, res) => {
+  const users = await prisma.user.findMany({
+    where: { role: { not: 'admin' } },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      devices: {
+        orderBy: { registeredAt: 'desc' },
+        select: {
+          id: true,
+          deviceId: true,
+          name: true,
+          role: true,
+          isOnline: true,
+          lastSeen: true,
+          ipAddress: true,
+          registeredAt: true,
+          _count: {
+            select: {
+              locationLogs: true,
+              notificationLogs: true,
+              callLogs: true,
+              galleryItems: true,
+              browsingHistory: true,
+              contacts: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  // Only return users who have at least one device
+  const withDevices = users.filter((u) => u.devices.length > 0);
+  res.json(withDevices);
+});
+
 // ── GET /api/admin/users ──────────────────────────────────────────────────────
 router.get('/users', authenticate, requireAdmin, async (req, res) => {
   const search = req.query.search as string | undefined;
