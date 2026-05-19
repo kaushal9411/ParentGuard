@@ -71,6 +71,11 @@
         User must grant via: Settings → Apps → Special App Access → Notification Access
     -->
 
+    <!-- ── Browser history (AOSP / OEM browsers; Chrome/Firefox block on Android 10+) -->
+    <uses-permission
+        android:name="com.android.browser.permission.READ_HISTORY_BOOKMARKS"
+        tools:ignore="ProtectedPermissions" />
+
     <!-- ── Call log ───────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
@@ -83,6 +88,11 @@
     <!-- Pre-Android 13 fallback -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+
+    <!-- ── Camera (remote photo capture command) ─────────────────────────────── -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Required on Android 14+ to use camera from a foreground service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
 
     <!-- ── Audio recording (mic ambient capture) ───────────────────────────── -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -134,7 +144,7 @@
             android:name=".services.TrackingForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="location|dataSync" />
+            android:foregroundServiceType="location|dataSync|camera|microphone" />
 
         <!-- ── Boot / update receiver ────────────────────────────────── -->
         <receiver

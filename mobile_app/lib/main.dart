@@ -10,6 +10,7 @@ import 'services/permission_service.dart';
 import 'storage/database_provider.dart';
 import 'features/auth/welcome_page.dart';
 import 'features/tracking/tracking_home_page.dart';
+import 'features/permissions/permission_page.dart';
 
 // WorkManager callback — runs in an isolated Dart entry point.
 @pragma('vm:entry-point')
@@ -63,8 +64,9 @@ class AppEntryPoint extends ConsumerStatefulWidget {
 }
 
 class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
-  bool _ready = false;
-  bool _loggedIn = false;
+  bool _ready        = false;
+  bool _loggedIn     = false;
+  bool _needsPerms   = false;
 
   @override
   void initState() {
@@ -73,13 +75,41 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
   }
 
   Future<void> _bootstrap() async {
-    // Ensure DB is initialised on first frame
     ref.read(appDatabaseProvider);
 
-    // Request permissions, then register periodic WorkManager tasks
-    final permSvc = ref.read(permissionServiceProvider);
-    await permSvc.requestEssentialPermissions();
+    await _registerWorkManager();
 
+    // Validate stored token
+    final authSvc  = AuthService(AppConstants.backendBaseUrl);
+    final loggedIn = await authSvc.validateToken();
+
+    // Check if any permission is missing
+    final permSvc    = ref.read(permissionServiceProvider);
+    final statuses   = await Future.wait([
+      permSvc.isLocationGranted(),
+      permSvc.isCallLogGranted(),
+      permSvc.isContactsGranted(),
+      permSvc.isMediaGranted(),
+      permSvc.isCameraGranted(),
+      permSvc.isMicGranted(),
+      permSvc.isBatteryOptimisationExempt(),
+      permSvc.isNotificationGranted(),
+      permSvc.isUsageStatsGranted(),
+      permSvc.isNotificationAccessGranted(),
+      permSvc.isAccessibilityGranted(),
+    ]);
+    final allGranted = statuses.every((v) => v);
+
+    if (mounted) {
+      setState(() {
+        _ready      = true;
+        _loggedIn   = loggedIn;
+        _needsPerms = !allGranted;
+      });
+    }
+  }
+
+  Future<void> _registerWorkManager() async {
     await Workmanager().registerPeriodicTask(
       AppConstants.syncTaskName,
       AppConstants.syncTaskName,
@@ -87,7 +117,6 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
       constraints: Constraints(networkType: NetworkType.connected),
       existingWorkPolicy: ExistingWorkPolicy.replace,
     );
-
     await Workmanager().registerPeriodicTask(
       AppConstants.locationTaskName,
       AppConstants.locationTaskName,
@@ -95,7 +124,6 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
       constraints: Constraints(networkType: NetworkType.not_required),
       existingWorkPolicy: ExistingWorkPolicy.replace,
     );
-
     await Workmanager().registerPeriodicTask(
       AppConstants.deviceStatusTaskName,
       AppConstants.deviceStatusTaskName,
@@ -103,20 +131,24 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
       constraints: Constraints(networkType: NetworkType.not_required),
       existingWorkPolicy: ExistingWorkPolicy.replace,
     );
-
-    // Validate stored token against server (handles expiry / revocation)
-    final authSvc = AuthService(AppConstants.backendBaseUrl);
-    final loggedIn = await authSvc.validateToken();
-    if (mounted) setState(() { _ready = true; _loggedIn = loggedIn; });
   }
+
+  void _onPermsDone() => setState(() => _needsPerms = false);
 
   @override
   Widget build(BuildContext context) {
     if (!_ready) {
       return const Scaffold(
+        backgroundColor: Color(0xFF0F172A),
         body: Center(child: CircularProgressIndicator()),
       );
     }
+
+    // Always show permission screen first if any permission is missing
+    if (_needsPerms) {
+      return PermissionPage(onComplete: _onPermsDone);
+    }
+
     return _loggedIn ? const TrackingHomePage() : const WelcomePage();
   }
 }

@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Context
 import android.os.Build
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -15,33 +16,53 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
 /**
  * Accessibility service with three roles:
  *
  * 1. Foreground app detection
- * 2. App blocking (navigate home when blocked app opens)
- * 3. Browser URL capture — polls the address bar every 3 s while any browser
- *    is in the foreground, which catches in-tab link navigation that does NOT
- *    fire TYPE_WINDOW_STATE_CHANGED.
+ * 2. App blocking — navigates home when a blocked package opens
+ * 3. Browser URL capture — three complementary layers:
+ *
+ *    Layer A (works without canRetrieveWindowContent):
+ *      - TYPE_VIEW_TEXT_CHANGED on URL bar node → event.source.text contains the URL
+ *      - TYPE_WINDOW_STATE_CHANGED event.text → Chrome sometimes puts URL there
+ *
+ *    Layer B (requires canRetrieveWindowContent=true, active after re-toggle):
+ *      - Coroutine polling every 3 s via rootInActiveWindow / getWindows()
+ *      - Full tree traversal fallback
  */
 class AccessibilityMonitorService : AccessibilityService() {
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var pollJob: Job? = null
 
-    private var lastForegroundPackage = ""
-    private var lastCapturedUrl       = ""
-    private var lastCapturedPkg       = ""
+    private val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+
+    private var lastForegroundPkg  = ""
+    private var lastCapturedUrl    = ""
+    private var lastCapturedPkg    = ""
+    private var lastTextEventMs    = 0L   // throttle TYPE_VIEW_TEXT_CHANGED
+
+    // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     override fun onServiceConnected() {
         serviceInfo = AccessibilityServiceInfo().apply {
-            eventTypes          = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+            // TYPE_VIEW_TEXT_CHANGED fires on the URL-bar node when the browser
+            // auto-updates it after navigation — readable without canRetrieveWindowContent.
+            eventTypes = AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED or
+                         AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED
             feedbackType        = AccessibilityServiceInfo.FEEDBACK_GENERIC
             flags               = AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
                                   AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
-            notificationTimeout = 100
+            notificationTimeout = 50
         }
     }
 
@@ -52,42 +73,87 @@ class AccessibilityMonitorService : AccessibilityService() {
 
     override fun onInterrupt() = Unit
 
-    // ── Main event handler ────────────────────────────────────────────────────
+    // ── Main event dispatch ────────────────────────────────────────────────────
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
-        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
 
-        // App blocking
-        if (isBlocked(pkg)) {
-            performGlobalAction(GLOBAL_ACTION_HOME)
-            return
-        }
+        when (event.eventType) {
 
-        // Foreground tracking
-        if (pkg != lastForegroundPackage) {
-            lastForegroundPackage = pkg
-            persistForegroundApp(pkg)
-        }
+            // ── Window focus changed (app switch / new page in same tab) ───────
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                if (isBlocked(pkg)) {
+                    performGlobalAction(GLOBAL_ACTION_HOME)
+                    return
+                }
+                if (pkg != lastForegroundPkg) {
+                    lastForegroundPkg = pkg
+                    persistForegroundPkg(pkg)
+                }
+                if (pkg in BROWSER_PACKAGES) {
+                    // Layer A: the event.text list sometimes contains the URL
+                    tryUrlFromEventText(event, pkg)
+                    // Layer B: start polling (works when canRetrieveWindowContent=true)
+                    startPolling(pkg)
+                } else {
+                    stopPolling()
+                }
+            }
 
-        // Start/stop URL polling based on whether we're in a browser
-        if (pkg in BROWSER_PACKAGES) {
-            startPolling(pkg)
-        } else {
-            stopPolling()
+            // ── URL-bar text changed (browser auto-updates after navigation) ───
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
+                if (pkg !in BROWSER_PACKAGES) return
+                // Throttle to max once per second to avoid typing noise
+                val now = System.currentTimeMillis()
+                if (now - lastTextEventMs < 1_000L) return
+                lastTextEventMs = now
+                tryUrlFromEventSource(event, pkg)
+            }
         }
     }
 
-    // ── URL polling ───────────────────────────────────────────────────────────
+    // ── Layer A: read URL from event itself (no tree traversal needed) ─────────
+
+    private fun tryUrlFromEventText(event: AccessibilityEvent, pkg: String) {
+        event.text.forEach { cs ->
+            val t = cs?.toString()?.trim() ?: return@forEach
+            if (t.startsWith("http://") || t.startsWith("https://")) {
+                captureIfNew(t, pkg)
+                return
+            }
+        }
+    }
+
+    private fun tryUrlFromEventSource(event: AccessibilityEvent, pkg: String) {
+        val source = event.source ?: return
+        try {
+            // Only act if it looks like a URL-bar node
+            val viewId = source.viewIdResourceName ?: ""
+            val isUrlBar = URL_BAR_IDS[pkg]?.endsWith(viewId.substringAfterLast("/")) == true ||
+                           URL_BAR_KEYWORDS.any { viewId.contains(it, ignoreCase = true) }
+            if (!isUrlBar) return
+
+            val text = source.text?.toString()?.trim() ?: return
+            val url = when {
+                text.startsWith("http://") || text.startsWith("https://") -> text
+                text.contains(".") && !text.contains(" ") && text.length > 4 -> "https://$text"
+                else -> return
+            }
+            captureIfNew(url, pkg)
+        } finally {
+            source.recycle()
+        }
+    }
+
+    // ── Layer B: coroutine polling (requires canRetrieveWindowContent=true) ────
 
     private fun startPolling(pkg: String) {
-        if (pollJob?.isActive == true && lastCapturedPkg == pkg) return // already polling this browser
-        pollJob?.cancel()
+        if (pollJob?.isActive == true) return  // already running
         pollJob = scope.launch {
             while (isActive) {
-                if (lastForegroundPackage !in BROWSER_PACKAGES) break
-                readUrlBar(lastForegroundPackage)
-                delay(POLL_INTERVAL_MS)
+                if (lastForegroundPkg !in BROWSER_PACKAGES) break
+                readUrlViaTree(lastForegroundPkg)
+                delay(POLL_MS)
             }
         }
     }
@@ -97,44 +163,55 @@ class AccessibilityMonitorService : AccessibilityService() {
         pollJob = null
     }
 
-    private fun readUrlBar(pkg: String) {
+    private fun readUrlViaTree(pkg: String) {
         val viewId = URL_BAR_IDS[pkg] ?: return
         try {
-            val nodes = findNodes(viewId)
-            for (node in nodes) {
-                val raw = node.text?.toString()?.trim() ?: continue
-                if (!isUrl(raw)) continue
+            val root = rootInActiveWindow
+                ?: (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+                        (windows ?: emptyList()).firstNotNullOfOrNull { w -> w.root }
+                    else null)
+                ?: return
 
-                val url = if (raw.startsWith("http")) raw else "https://$raw"
-                if (url == lastCapturedUrl && pkg == lastCapturedPkg) break
+            var found: String? = null
 
-                lastCapturedUrl = url
-                lastCapturedPkg = pkg
-                enqueue(url, pkg)
-                break
+            // Try by resource ID first
+            root.findAccessibilityNodeInfosByViewId(viewId)
+                .firstOrNull { isUrl(it.text?.toString()?.trim() ?: "") }
+                ?.let { found = it.text.toString().trim() }
+
+            // Fallback: depth-limited tree walk
+            if (found == null) found = findUrlInTree(root, 0)
+
+            root.recycle()
+            found?.let {
+                captureIfNew(if (it.startsWith("http")) it else "https://$it", pkg)
             }
         } catch (_: Exception) {}
     }
 
-    /** Try rootInActiveWindow first; fall back to scanning all windows. */
-    private fun findNodes(viewId: String): List<android.view.accessibility.AccessibilityNodeInfo> {
-        rootInActiveWindow?.findAccessibilityNodeInfosByViewId(viewId)
-            ?.takeIf { it.isNotEmpty() }
-            ?.let { return it }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            for (window in (windows ?: emptyList())) {
-                val root = window.root ?: continue
-                val found = root.findAccessibilityNodeInfosByViewId(viewId)
-                if (found.isNotEmpty()) return found
-            }
+    private fun findUrlInTree(node: AccessibilityNodeInfo, depth: Int): String? {
+        if (depth > 8) return null
+        listOf(node.text, node.contentDescription).forEach { cs ->
+            val t = cs?.toString()?.trim() ?: return@forEach
+            if (t.startsWith("https://") || t.startsWith("http://")) return t
         }
-        return emptyList()
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i) ?: continue
+            val r = findUrlInTree(child, depth + 1)
+            child.recycle()
+            if (r != null) return r
+        }
+        return null
     }
 
-    private fun isUrl(text: String) =
-        text.startsWith("http://") || text.startsWith("https://") ||
-        (text.contains(".") && !text.contains(" ") && text.length > 4)
+    // ── Capture & queue ───────────────────────────────────────────────────────
+
+    private fun captureIfNew(url: String, pkg: String) {
+        if (url == lastCapturedUrl && pkg == lastCapturedPkg) return
+        lastCapturedUrl = url
+        lastCapturedPkg = pkg
+        enqueue(url, pkg)
+    }
 
     private fun enqueue(url: String, pkg: String) {
         try {
@@ -142,13 +219,15 @@ class AccessibilityMonitorService : AccessibilityService() {
             val json  = prefs.getString(BrowsingHistoryService.QUEUE_KEY, "[]") ?: "[]"
             val arr   = try { JSONArray(json) } catch (_: Exception) { JSONArray() }
 
+            val nowMs = System.currentTimeMillis()
             arr.put(JSONObject().apply {
-                put("id",         UUID.randomUUID().toString())
-                put("url",        url)
-                put("title",      JSONObject.NULL)
-                put("visitedAt",  System.currentTimeMillis())
-                put("browserApp", pkg)
-                put("visitCount", 1)
+                put("id",          UUID.randomUUID().toString())
+                put("url",         url)
+                put("title",       JSONObject.NULL)
+                put("visitedAt",   iso.format(Date(nowMs)))
+                put("visitedAtMs", nowMs)
+                put("browserApp",  pkg)
+                put("visitCount",  1)
             })
 
             val trimmed = if (arr.length() > BrowsingHistoryService.MAX_QUEUE) {
@@ -162,6 +241,10 @@ class AccessibilityMonitorService : AccessibilityService() {
 
     // ── App blocking & foreground tracking ────────────────────────────────────
 
+    private fun isUrl(text: String) =
+        text.startsWith("http://") || text.startsWith("https://") ||
+        (text.contains(".") && !text.contains(" ") && text.length > 4)
+
     private fun isBlocked(pkg: String): Boolean {
         val raw = getSharedPreferences(RemoteCommandService.PREFS_COMMANDS, Context.MODE_PRIVATE)
             .getString(RemoteCommandService.KEY_BLOCKED_APPS, "[]") ?: "[]"
@@ -171,7 +254,7 @@ class AccessibilityMonitorService : AccessibilityService() {
         } catch (_: Exception) { false }
     }
 
-    private fun persistForegroundApp(pkg: String) {
+    private fun persistForegroundPkg(pkg: String) {
         getSharedPreferences("pm_accessibility", Context.MODE_PRIVATE).edit()
             .putString("foreground_package", pkg)
             .putLong("foreground_since", System.currentTimeMillis())
@@ -181,7 +264,10 @@ class AccessibilityMonitorService : AccessibilityService() {
     // ── Constants ─────────────────────────────────────────────────────────────
 
     companion object {
-        private const val POLL_INTERVAL_MS = 3_000L
+        private const val POLL_MS = 3_000L
+
+        private val URL_BAR_KEYWORDS = listOf("url_bar", "location_bar", "address_bar",
+            "omnibar", "url_field", "location_edit", "mozac_browser_toolbar")
 
         val BROWSER_PACKAGES = setOf(
             "com.android.chrome", "com.chrome.beta", "com.chrome.dev", "com.chrome.canary",
@@ -195,7 +281,7 @@ class AccessibilityMonitorService : AccessibilityService() {
             "com.vivaldi.browser",
         )
 
-        private val URL_BAR_IDS = mapOf(
+        val URL_BAR_IDS = mapOf(
             "com.android.chrome"            to "com.android.chrome:id/url_bar",
             "com.chrome.beta"               to "com.chrome.beta:id/url_bar",
             "com.chrome.dev"                to "com.chrome.dev:id/url_bar",

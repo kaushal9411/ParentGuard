@@ -34,7 +34,10 @@ class ChannelConstants {
   static const String getNetworkStatus          = 'getNetworkStatus';
   static const String openNotificationSettings  = 'openNotificationSettings';
   static const String isNotificationAccessGranted = 'isNotificationAccessGranted';
-  static const String openBatterySettings       = 'openBatterySettings';
+  static const String openBatterySettings           = 'openBatterySettings';
+  static const String isBatteryOptimizationExempt  = 'isBatteryOptimizationExempt';
+  static const String openAccessibilitySettings    = 'openAccessibilitySettings';
+  static const String isAccessibilityGranted       = 'isAccessibilityGranted';
 
   // ── Monitoring methods ────────────────────────────────────────────────────
   static const String getCallLogs        = 'getCallLogs';

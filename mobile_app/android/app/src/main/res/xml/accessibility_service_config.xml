@@ -1,22 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Accessibility config for ParentGuard.
+    typeWindowStateChanged  — app switch + new browser window/tab
+    typeViewTextChanged     — URL bar text update after navigation
+                              (works WITHOUT canRetrieveWindowContent)
 
-    canRetrieveWindowContent = true   — needed to read browser address-bar text
-                                        for URL history capture.
-    accessibilityEventTypes            — typeWindowStateChanged fires on every
-                                        page navigation (app switch or new page),
-                                        which is when we read the URL bar.
-    flagReportViewIds                  — allows findAccessibilityNodeInfosByViewId
-                                        to locate the URL bar by its resource ID.
+    canRetrieveWindowContent = true  — enables rootInActiveWindow tree traversal
+                                       (Layer B: polling + tree scan)
+                                       Requires re-toggle after first install.
+
+    flagReportViewIds       — enables findAccessibilityNodeInfosByViewId
+    flagRetrieveInteractiveWindows — enables getWindows() fallback
 -->
 <accessibility-service
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewTextChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
-    android:notificationTimeout="100"
+    android:notificationTimeout="50"
     android:packageNames=""
     android:settingsActivity=".MainActivity" />

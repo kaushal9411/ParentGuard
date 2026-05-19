@@ -1023,8 +1023,131 @@ function BrowsingTab({ data }: { data: UserDetail }) {
 
 // ─── Types for Remote tab ─────────────────────────────────────────────────────
 interface RemoteCommand { id: string; commandType: string; payload: string; status: string; result: string | null; issuedAt: string; completedAt: string | null; }
+
+// ─── Command result viewer ────────────────────────────────────────────────────
+function CommandResult({ raw }: { raw: string | null }) {
+  if (!raw) return <span className="text-gray-600">—</span>;
+
+  let parsed: Record<string, unknown>;
+  try { parsed = JSON.parse(raw); }
+  catch { return <span className="text-gray-400 text-xs font-mono">{raw.slice(0, 80)}</span>; }
+
+  const type = parsed.type as string | undefined;
+
+  // ── Photo ──────────────────────────────────────────────────────────────────
+  if (type === 'photo' && parsed.data) {
+    const src = `data:${parsed.mimeType ?? 'image/jpeg'};base64,${parsed.data}`;
+    return (
+      <div className="mt-2 space-y-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="Captured" className="max-w-sm rounded-lg border border-gray-700" />
+        <a
+          href={src}
+          download={`photo_${Date.now()}.jpg`}
+          className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+        >
+          ↓ Download photo
+        </a>
+      </div>
+    );
+  }
+
+  // ── Audio ──────────────────────────────────────────────────────────────────
+  if (type === 'audio' && parsed.data) {
+    const src = `data:${parsed.mimeType ?? 'audio/mp4'};base64,${parsed.data}`;
+    const dur = parsed.duration as number | undefined;
+    return (
+      <div className="mt-2 space-y-2">
+        <audio controls src={src} className="w-full max-w-sm" />
+        {dur != null && <p className="text-xs text-gray-500">Duration: {dur}s</p>}
+        <a
+          href={src}
+          download={`audio_${Date.now()}.m4a`}
+          className="inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+        >
+          ↓ Download audio
+        </a>
+      </div>
+    );
+  }
+
+  // ── File list ──────────────────────────────────────────────────────────────
+  if (type === 'files') {
+    const entries = (parsed.entries as Array<{ name: string; size: number; isDir: boolean; modified: number }>) ?? [];
+    return (
+      <div className="mt-2 max-h-48 overflow-y-auto space-y-0.5">
+        {entries.map((f, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs py-0.5">
+            <span className="text-gray-500">{f.isDir ? '📁' : '📄'}</span>
+            <span className="text-white flex-1 truncate">{f.name}</span>
+            {!f.isDir && <span className="text-gray-600">{fmtBytes(f.size)}</span>}
+          </div>
+        ))}
+        {entries.length === 0 && <span className="text-gray-500 text-xs">Empty</span>}
+      </div>
+    );
+  }
+
+  // ── Status / error / generic ───────────────────────────────────────────────
+  const msg = (parsed.message ?? parsed.error ?? parsed.status) as string | undefined;
+  const color = type === 'error' ? 'text-red-400' : 'text-green-400';
+  return <span className={`text-xs ${color}`}>{msg ?? JSON.stringify(parsed).slice(0, 120)}</span>;
+}
 interface Geofence { id: string; name: string; latitude: number; longitude: number; radiusM: number; isActive: boolean; createdAt: string; }
 interface AppBlockRule { id: string; packageName: string; appName: string; isBlocked: boolean; createdAt: string; }
+
+// ─── Command row (expandable) ─────────────────────────────────────────────────
+function CommandRow({ command: c }: { command: RemoteCommand }) {
+  const [open, setOpen] = useState(false);
+  const hasResult = !!c.result;
+  const completedDate = c.completedAt ? new Date(c.completedAt) : null;
+
+  return (
+    <div className="bg-gray-800/50 rounded-xl overflow-hidden">
+      <button
+        onClick={() => hasResult && setOpen((o) => !o)}
+        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors ${hasResult ? 'hover:bg-gray-800 cursor-pointer' : 'cursor-default'}`}
+      >
+        {/* Command name */}
+        <span className="text-white text-xs font-mono font-semibold flex-1">
+          {c.commandType}
+        </span>
+
+        {/* Status badge */}
+        <span className={`text-xs px-2 py-0.5 rounded-full font-semibold capitalize ${STATUS_COLOR[c.status] ?? 'text-gray-400 bg-gray-700'}`}>
+          {c.status}
+        </span>
+
+        {/* Issued at */}
+        <span className="text-gray-500 text-xs whitespace-nowrap">
+          {new Date(c.issuedAt).toLocaleString()}
+        </span>
+
+        {/* Completed at */}
+        {completedDate && (
+          <span className="text-gray-600 text-xs whitespace-nowrap">
+            ✓ {completedDate.toLocaleTimeString()}
+          </span>
+        )}
+
+        {/* Expand indicator */}
+        {hasResult && (
+          <span className="text-indigo-400 text-xs ml-1">{open ? '▲' : '▼'}</span>
+        )}
+        {!hasResult && c.status === 'pending' && (
+          <span className="text-yellow-400 text-xs">waiting…</span>
+        )}
+      </button>
+
+      {/* Result panel */}
+      {open && hasResult && (
+        <div className="border-t border-gray-700 px-4 pb-4">
+          <CommandResult raw={c.result} />
+        </div>
+      )}
+    </div>
+  );
+}
 
 const STATUS_COLOR: Record<string, string> = {
   pending:   'text-yellow-400 bg-yellow-900/30',
@@ -1164,35 +1287,10 @@ function RemoteTab({ data }: { data: UserDetail }) {
           <button onClick={reload} className="ml-auto text-xs text-gray-500 hover:text-white transition-colors">Refresh</button>
         </div>
         {commands.length === 0 ? <Empty msg="No commands issued yet" /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-gray-800 text-gray-400">
-                  <th className="text-left pb-2 pr-3">Command</th>
-                  <th className="text-left pb-2 pr-3">Status</th>
-                  <th className="text-left pb-2 pr-3">Issued</th>
-                  <th className="text-left pb-2">Result</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800/50">
-                {commands.map((c) => (
-                  <tr key={c.id} className="hover:bg-gray-800/30">
-                    <td className="py-2.5 pr-3 text-white font-mono">{c.commandType}</td>
-                    <td className="py-2.5 pr-3">
-                      <span className={`px-2 py-0.5 rounded-full font-semibold capitalize ${STATUS_COLOR[c.status] ?? 'text-gray-400'}`}>
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="py-2.5 pr-3 text-gray-500">{timeAgo(c.issuedAt)}</td>
-                    <td className="py-2.5 text-gray-400 max-w-xs truncate">
-                      {c.result ? (
-                        <span title={c.result} className="cursor-help underline decoration-dotted">View result</span>
-                      ) : '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {commands.map((c) => (
+              <CommandRow key={c.id} command={c} />
+            ))}
           </div>
         )}
       </Card>

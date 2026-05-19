@@ -4,9 +4,17 @@ import android.content.Context
 import android.net.Uri
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import java.util.UUID
 
 class BrowsingHistoryService(private val ctx: Context) {
+
+    private val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
 
     // Chromium-based: Chrome, Brave, Edge, Kiwi, Vivaldi, Opera, AOSP Browser
     private val CHROMIUM = listOf(
@@ -63,7 +71,7 @@ class BrowsingHistoryService(private val ctx: Context) {
             for (i in 0 until arr.length()) {
                 if (out.length() >= MAX_TOTAL) break
                 val e  = arr.optJSONObject(i) ?: continue
-                val ts = e.optLong("visitedAt", 0)
+                val ts = e.optLong("visitedAtMs", 0)
                 if (since <= 0 || ts > since) out.put(e)
             }
             prefs.edit().putString(QUEUE_KEY, "[]").apply()
@@ -148,7 +156,8 @@ class BrowsingHistoryService(private val ctx: Context) {
             put("id",         UUID.randomUUID().toString())
             put("url",        url)
             put("title",      title ?: JSONObject.NULL)
-            put("visitedAt",  ts)
+            put("visitedAt",  iso.format(Date(ts)))   // ISO-8601 string, consistent with all other events
+            put("visitedAtMs", ts)                    // raw ms kept for since-tracking in Dart
             put("browserApp", pkg)
             put("visitCount", visits)
         }

@@ -109,6 +109,17 @@ class TrackingChannel {
   Future<void> openBatterySettings() =>
       _invoke<void>(_device, ChannelConstants.openBatterySettings);
 
+  Future<bool> isBatteryOptimizationExempt() => _invoke<bool>(
+        _device, ChannelConstants.isBatteryOptimizationExempt,
+      ).then((v) => v ?? false);
+
+  Future<void> openAccessibilitySettings() =>
+      _invoke<void>(_device, ChannelConstants.openAccessibilitySettings);
+
+  Future<bool> isAccessibilityGranted() => _invoke<bool>(
+        _device, ChannelConstants.isAccessibilityGranted,
+      ).then((v) => v ?? false);
+
   // ── Monitoring ────────────────────────────────────────────────────────────
 
   /// Returns list of call log entries since [sinceTimestamp] ms epoch.

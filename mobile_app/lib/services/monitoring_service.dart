@@ -267,11 +267,29 @@ class MonitoringService {
       if (items.isEmpty) return;
 
       for (final item in items) {
-        await _queue.enqueue(EventType.browsingHistory, item);
+        // Only send the fields the backend expects — strip the helper field
+        await _queue.enqueue(EventType.browsingHistory, {
+          'id':         item['id'],
+          'url':        item['url'],
+          'title':      item['title'],
+          'visitedAt':  item['visitedAt'],   // ISO string
+          'browserApp': item['browserApp'],
+          'visitCount': item['visitCount'],
+        });
       }
 
+      // Use visitedAtMs (raw epoch ms) for the since-cursor, not the ISO string
       final newest = items
-          .map((e) => (e['visitedAt'] as int?) ?? 0)
+          .map((e) {
+            final ms = e['visitedAtMs'];
+            if (ms is int) return ms;
+            // Fallback: parse ISO string if visitedAtMs somehow missing
+            final iso = e['visitedAt'];
+            if (iso is String) {
+              return DateTime.tryParse(iso)?.millisecondsSinceEpoch ?? 0;
+            }
+            return 0;
+          })
           .fold(0, (a, b) => a > b ? a : b);
       if (newest > 0) await prefs.setInt(_lastBrowsingTs, newest);
 

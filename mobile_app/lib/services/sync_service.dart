@@ -18,67 +18,83 @@ class SyncService {
   late final Dio _dio = Dio(BaseOptions(
     baseUrl: _baseUrl,
     connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 20),
+    receiveTimeout: const Duration(seconds: 30),
   ));
 
   bool _busy = false;
 
+  /// Drains the ENTIRE event queue to the backend, batch by batch.
+  /// Stops on the first network error so the remaining events are retried
+  /// on the next call.
   Future<void> sync() async {
     if (_busy) return;
     _busy = true;
 
     try {
+      // Move previously-failed events (retry_count < max) back to pending.
       await _queue.requeueFailed();
-      final batch = await _queue.getPendingBatch();
-
-      if (batch.isEmpty) {
-        appLogger.d('Sync: queue empty');
-        return;
-      }
-
-      appLogger.i('Sync: uploading ${batch.length} events');
 
       final token = await TokenStore.getToken();
       if (token == null) {
         appLogger.w('Sync: no auth token — skipping upload');
         return;
       }
-
       final deviceId = await DeviceIdUtil.get();
 
-      final payload = {
-        'deviceId': deviceId,
-        'events': batch.map((e) => {
-          'id': e.id,
-          'type': e.eventType,
-          'payload': jsonDecode(e.payloadJson) as Map<String, dynamic>,
-        }).toList(),
-      };
+      int totalSent = 0;
 
-      try {
-        final resp = await _dio.post(
-          '/api/events/batch',
-          data: payload,
-          options: Options(headers: {'Authorization': 'Bearer $token'}),
-        );
+      // Loop until the queue is empty — don't leave events stranded behind
+      // a large backlog of earlier events.
+      while (true) {
+        final batch = await _queue.getPendingBatch();
+        if (batch.isEmpty) break;
 
-        final processed = resp.data['processed'] as int? ?? 0;
-        final failed = resp.data['failed'] as int? ?? 0;
-        appLogger.i('Sync: server accepted $processed, rejected $failed');
+        appLogger.i('Sync: uploading ${batch.length} events');
 
-        for (final event in batch) {
-          await _queue.markCompleted(event.id);
+        final payload = {
+          'deviceId': deviceId,
+          'events': batch.map((e) => {
+            'id':      e.id,
+            'type':    e.eventType,
+            'payload': jsonDecode(e.payloadJson) as Map<String, dynamic>,
+          }).toList(),
+        };
+
+        try {
+          final resp = await _dio.post(
+            '/api/events/batch',
+            data: payload,
+            options: Options(headers: {'Authorization': 'Bearer $token'}),
+          );
+
+          final processed = resp.data['processed'] as int? ?? 0;
+          final failed    = resp.data['failed']    as int? ?? 0;
+
+          if (failed > 0) {
+            appLogger.w('Sync: backend rejected $failed/${batch.length} events');
+          }
+
+          // Mark all events in this batch completed. The backend logs
+          // individual failures with the event ID for server-side debugging.
+          for (final event in batch) {
+            await _queue.markCompleted(event.id);
+          }
+
+          totalSent += processed;
+        } on DioException catch (e) {
+          appLogger.w('Sync: batch upload failed — ${e.message}');
+          for (final event in batch) {
+            await _queue.markFailed(
+              event.id, e.message ?? 'network', event.retryCount + 1);
+          }
+          break; // stop looping; retry on next captureAllAndSync
         }
-      } on DioException catch (e) {
-        appLogger.w('Sync: batch upload failed — ${e.message}');
-        for (final event in batch) {
-          await _queue.markFailed(event.id, e.message ?? 'network', event.retryCount + 1);
-        }
-        return;
       }
 
       await _queue.cleanup();
-      appLogger.i('Sync: done (${batch.length} events)');
+      if (totalSent > 0) {
+        appLogger.i('Sync: done — $totalSent events accepted by backend');
+      }
     } finally {
       _busy = false;
     }

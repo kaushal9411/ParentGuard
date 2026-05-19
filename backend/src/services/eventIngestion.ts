@@ -193,19 +193,30 @@ async function ingestOne(deviceId: string, event: RawEvent): Promise<void> {
       });
       break;
 
-    case 'browsingHistory':
+    case 'browsingHistory': {
+      // visitedAt may arrive as an ISO-8601 string OR a raw ms-epoch integer
+      const rawVisitedAt = p.visitedAt;
+      const visitedAt = typeof rawVisitedAt === 'number'
+        ? new Date(rawVisitedAt)
+        : new Date(rawVisitedAt as string);
+
+      if (isNaN(visitedAt.getTime())) {
+        throw new Error(`Invalid visitedAt value: ${rawVisitedAt}`);
+      }
+
       await prisma.browsingHistory.create({
         data: {
           id:         event.id,
           deviceId,
-          url:        p.url       as string,
-          title:      (p.title      as string) ?? null,
-          visitedAt:  new Date(p.visitedAt as string),
+          url:        p.url        as string,
+          title:      (p.title     as string) ?? null,
+          visitedAt,
           browserApp: (p.browserApp as string) ?? null,
           visitCount: (p.visitCount as number) ?? 1,
         },
       });
       break;
+    }
 
     case 'geofenceAlert':
       await prisma.geofenceAlert.create({

@@ -110,10 +110,35 @@ class TrackingMethodChannel(
                 val flat = Settings.Secure.getString(ctx.contentResolver, "enabled_notification_listeners") ?: ""
                 result.success(flat.contains(ctx.packageName))
             }
+            "isBatteryOptimizationExempt" -> {
+                val pm = ctx.getSystemService(android.content.Context.POWER_SERVICE)
+                        as android.os.PowerManager
+                result.success(pm.isIgnoringBatteryOptimizations(ctx.packageName))
+            }
             "openBatterySettings" -> {
-                ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                // Open the app-specific battery dialog first; fall back to the
+                // general list if the device doesn't support the direct intent.
+                try {
+                    ctx.startActivity(
+                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                            .apply { data = android.net.Uri.parse("package:${ctx.packageName}") }
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {
+                    ctx.startActivity(
+                        Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+                result.success(null)
+            }
+            "openAccessibilitySettings" -> {
+                ctx.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 result.success(null)
+            }
+            "isAccessibilityGranted" -> {
+                val enabled = Settings.Secure.getString(
+                    ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: ""
+                result.success(enabled.contains(ctx.packageName))
             }
             else -> result.notImplemented()
         }
