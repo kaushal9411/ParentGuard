@@ -2,13 +2,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShieldCheck, LayoutDashboard, Users, Smartphone, LogOut, ChevronRight } from 'lucide-react';
+import { ShieldCheck, LayoutDashboard, Users, Smartphone, CreditCard, Download, LogOut, ChevronRight } from 'lucide-react';
 import { clearAdminAuth, getAdminUser } from '@/lib/adminAuth';
 
 const NAV = [
   { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/admin/devices',   icon: Smartphone,      label: 'Devices' },
-  { href: '/admin/users',     icon: Users,           label: 'All Users' },
+  { href: '/admin/devices',       icon: Smartphone,  label: 'Devices' },
+  { href: '/admin/subscriptions', icon: CreditCard,  label: 'Subscriptions' },
+  { href: '/admin/app-release',   icon: Download,    label: 'App Release' },
+  { href: '/admin/users',         icon: Users,       label: 'All Users' },
 ];
 
 export default function AdminSidebar() {

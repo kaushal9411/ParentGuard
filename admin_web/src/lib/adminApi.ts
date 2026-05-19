@@ -49,6 +49,42 @@ export const adminApi = {
   allDevices: () =>
     adminAxios.get('/api/admin/devices'),
 
+  // ── Subscription plans ───────────────────────────────────────────────────
+  getPlans: () =>
+    adminAxios.get('/api/subscription/admin/plans'),
+
+  createPlan: (data: object) =>
+    adminAxios.post('/api/subscription/admin/plans', data),
+
+  updatePlan: (id: string, data: object) =>
+    adminAxios.patch(`/api/subscription/admin/plans/${id}`, data),
+
+  deletePlan: (id: string) =>
+    adminAxios.delete(`/api/subscription/admin/plans/${id}`),
+
+  // ── User subscriptions ───────────────────────────────────────────────────
+  getSubscriptionUsers: () =>
+    adminAxios.get('/api/subscription/admin/users'),
+
+  assignSubscription: (userId: string, data: { planId: string; expiresAt?: string | null; notes?: string }) =>
+    adminAxios.post(`/api/subscription/admin/users/${userId}`, data),
+
+  revokeSubscription: (userId: string) =>
+    adminAxios.delete(`/api/subscription/admin/users/${userId}`),
+
+  // ── Upgrade requests ──────────────────────────────────────────────────────
+  getUpgradeRequests: () =>
+    adminAxios.get('/api/subscription/requests'),
+
+  processRequest: (requestId: string, action: 'approve' | 'reject') =>
+    adminAxios.patch(`/api/subscription/requests/${requestId}`, { action }),
+
+  sendPaymentLink: (userId: string, data: { planId: string; phone?: string; description?: string }) =>
+    adminAxios.post('/api/subscription/admin/payment-link', { userId, ...data }),
+
+  getPaymentHistory: () =>
+    adminAxios.get('/api/subscription/admin/payment-history'),
+
   deleteUser: (userId: string) =>
     adminAxios.delete(`/api/admin/users/${userId}`),
 

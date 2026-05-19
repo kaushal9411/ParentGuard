@@ -16,6 +16,9 @@ import notificationsRouter from './routes/notifications';
 import commandsRouter from './routes/commands';
 import galleryRouter, { GALLERY_UPLOADS_DIR } from './routes/gallery';
 import fcmRouter from './routes/fcm';
+import subscriptionRouter from './routes/subscriptions';
+import downloadsRouter from './routes/downloads';
+import consentRouter from './routes/consent';
 
 const app = express();
 const httpServer = createServer(app);
@@ -47,6 +50,11 @@ app.use('/api/notifications', notificationsRouter);
 app.use('/api/commands',     commandsRouter);
 app.use('/api/gallery',      galleryRouter);
 app.use('/api/fcm',          fcmRouter);
+// Razorpay webhook needs raw JSON body for signature verification
+app.use('/api/subscription/webhook', express.json());
+app.use('/api/subscription', subscriptionRouter);
+app.use('/api/downloads',   downloadsRouter);
+app.use('/api/consent',     consentRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

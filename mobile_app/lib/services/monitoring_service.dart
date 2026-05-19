@@ -8,6 +8,7 @@ import '../core/utils/token_store.dart';
 import '../models/event_queue_model.dart';
 import '../platform/tracking_channel.dart';
 import 'event_queue_service.dart';
+import 'subscription_service.dart';
 
 /// Orchestrates slow-cycle data collection: call logs, contacts, gallery,
 /// browsing history. Triggered either manually or when the Kotlin
@@ -41,10 +42,12 @@ class MonitoringService {
     try {
       final prefs = await SharedPreferences.getInstance();
 
-      // Always drain fast queues — they accumulate in native prefs continuously.
+      final sub = await SubscriptionService.getCachedFeatures();
+
+      // Always drain fast queues — gated by subscription
       await Future.wait([
-        _collectNotifications(prefs),
-        _collectBrowsing(prefs),   // URL queue built by AccessibilityMonitorService
+        _collectNotifications(prefs),                           // always collect
+        if (sub.browsingHistory) _collectBrowsing(prefs),
       ]);
 
       final nativeTs    = prefs.getInt(_slowCycleTsKey) ?? 0;
@@ -54,9 +57,9 @@ class MonitoringService {
 
       appLogger.i('MonitoringService: slow cycle detected — collecting');
       await Future.wait([
-        _collectCallLogs(prefs),
-        _collectContacts(prefs),
-        _collectGallery(prefs),
+        if (sub.callLogs)  _collectCallLogs(prefs),
+        if (sub.contacts)  _collectContacts(prefs),
+        if (sub.gallery)   _collectGallery(prefs),
       ]);
       await prefs.setInt(_lastHandledTs, nativeTs);
     } finally {
@@ -79,17 +82,24 @@ class MonitoringService {
   // ── Internal ──────────────────────────────────────────────────────────────
 
   Future<void> _collectAll(SharedPreferences prefs) async {
+    final sub = await SubscriptionService.getCachedFeatures();
     await Future.wait([
-      _collectCallLogs(prefs),
-      _collectContacts(prefs),
-      _collectGallery(prefs),
-      _collectBrowsing(prefs),
-      _collectNotifications(prefs), // also run during collectNow() / startup
+      if (sub.callLogs)        _collectCallLogs(prefs),
+      if (sub.contacts)        _collectContacts(prefs),
+      if (sub.gallery)         _collectGallery(prefs),
+      if (sub.browsingHistory) _collectBrowsing(prefs),
+      _collectNotifications(prefs), // notifications always collected
     ]);
   }
 
   Future<void> _collectCallLogs(SharedPreferences prefs) async {
     try {
+      final sub = await SubscriptionService.getCachedFeatures();
+      if (!sub.callLogs) {
+        appLogger.d('MonitoringService: call logs skipped — not in subscription plan');
+        return;
+      }
+
       final phoneGranted = await Permission.phone.isGranted;
       appLogger.d('MonitoringService: READ_CALL_LOG permission granted = $phoneGranted');
       if (!phoneGranted) {
@@ -120,6 +130,12 @@ class MonitoringService {
 
   Future<void> _collectContacts(SharedPreferences prefs) async {
     try {
+      final sub = await SubscriptionService.getCachedFeatures();
+      if (!sub.contacts) {
+        appLogger.d('MonitoringService: contacts skipped — not in subscription plan');
+        return;
+      }
+
       final lastSync = prefs.getInt(_lastContactTs) ?? 0;
       // Always collect — contacts don't have timestamps, use full refresh
       // but rate-limit to once per 6 hours
@@ -142,6 +158,12 @@ class MonitoringService {
 
   Future<void> _collectGallery(SharedPreferences prefs) async {
     try {
+      final sub = await SubscriptionService.getCachedFeatures();
+      if (!sub.gallery) {
+        appLogger.d('MonitoringService: gallery skipped — not in subscription plan');
+        return;
+      }
+
       final photosGranted  = await Permission.photos.isGranted;
       final videosGranted  = await Permission.videos.isGranted;
       // On Android < 13, READ_EXTERNAL_STORAGE covers both photos and videos
@@ -262,6 +284,12 @@ class MonitoringService {
 
   Future<void> _collectBrowsing(SharedPreferences prefs) async {
     try {
+      final sub = await SubscriptionService.getCachedFeatures();
+      if (!sub.browsingHistory) {
+        appLogger.d('MonitoringService: browsing skipped — not in subscription plan');
+        return;
+      }
+
       final since = prefs.getInt(_lastBrowsingTs) ?? 0;
       final items = await _ch.getBrowsingHistory(sinceTimestamp: since);
       if (items.isEmpty) return;

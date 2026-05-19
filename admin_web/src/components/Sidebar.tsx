@@ -3,16 +3,18 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Shield, LayoutDashboard, Smartphone, MapPin,
-  BarChart2, Bell, LogOut, ChevronRight,
+  BarChart2, Bell, CreditCard, Download, LogOut, ChevronRight,
 } from 'lucide-react';
 import { clearAuth } from '@/lib/auth';
 
 const NAV = [
-  { href: '/dashboard',              icon: LayoutDashboard, label: 'Overview' },
-  { href: '/dashboard/devices',      icon: Smartphone,      label: 'Devices' },
-  { href: '/dashboard/location',     icon: MapPin,          label: 'Location' },
-  { href: '/dashboard/apps',         icon: BarChart2,       label: 'App Usage' },
-  { href: '/dashboard/notifications',icon: Bell,            label: 'Notifications' },
+  { href: '/dashboard',               icon: LayoutDashboard, label: 'Overview' },
+  { href: '/dashboard/devices',       icon: Smartphone,      label: 'Devices' },
+  { href: '/dashboard/location',      icon: MapPin,          label: 'Location' },
+  { href: '/dashboard/apps',          icon: BarChart2,       label: 'App Usage' },
+  { href: '/dashboard/notifications', icon: Bell,            label: 'Notifications' },
+  { href: '/dashboard/subscription',  icon: CreditCard,      label: 'Subscription' },
+  { href: '/dashboard/download',      icon: Download,        label: 'Download App' },
 ];
 
 export default function Sidebar() {
@@ -33,7 +35,7 @@ export default function Sidebar() {
         </div>
         <div>
           <p className="text-white font-bold text-base leading-none">ParentGuard</p>
-          <p className="text-blue-300 text-xs mt-0.5">Admin Panel</p>
+          <p className="text-blue-300 text-xs mt-0.5">Parent Portal</p>
         </div>
       </div>
 
@@ -43,7 +45,7 @@ export default function Sidebar() {
           Monitoring
         </p>
         {NAV.map(({ href, icon: Icon, label }) => {
-          const active = pathname === href;
+          const active = pathname.startsWith(href) && (href !== '/dashboard' || pathname === '/dashboard');
           return (
             <Link key={href} href={href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group
