@@ -149,6 +149,7 @@ model Device {
   notificationLogs NotificationLog[]
   statusLogs       DeviceStatusLog[]
   callLogs         CallLog[]
+  smsLogs          SmsLog[]
   contacts         Contact[]
   galleryItems     GalleryItem[]
   browsingHistory  BrowsingHistory[]
@@ -261,6 +262,25 @@ model CallLog {
 
   @@index([deviceId, timestamp(sort: Desc)])
   @@map("call_logs")
+}
+
+// ── SMS logs ──────────────────────────────────────────────────────────────────
+
+model SmsLog {
+  id        String   @id
+  deviceId  String   @map("device_id")
+  device    Device   @relation(fields: [deviceId], references: [deviceId])
+  address   String                    // phone number or contact name
+  body      String
+  type      Int                       // 1=inbox 2=sent 3=draft 4=outbox
+  date      DateTime
+  isRead    Boolean  @default(false) @map("is_read")
+  threadId  String?  @map("thread_id")
+  subject   String?
+  syncedAt  DateTime @default(now()) @map("synced_at")
+
+  @@index([deviceId, date(sort: Desc)])
+  @@map("sms_logs")
 }
 
 // ── Contacts ──────────────────────────────────────────────────────────────────

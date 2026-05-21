@@ -8,6 +8,7 @@ export type EventType =
   | 'notification'
   | 'deviceStatus'
   | 'callLog'
+  | 'smsLog'
   | 'contact'
   | 'galleryItem'
   | 'browsingHistory'
@@ -161,6 +162,24 @@ async function ingestOne(deviceId: string, event: RawEvent): Promise<void> {
           duration:  p.duration as number,
           simSlot:   (p.simSlot as number) ?? null,
           timestamp: new Date(p.timestamp as string),
+        },
+      });
+      break;
+
+    case 'smsLog':
+      await prisma.smsLog.upsert({
+        where:  { id: event.id },
+        update: {},   // immutable once stored
+        create: {
+          id:       event.id,
+          deviceId,
+          address:  (p.address  as string) ?? '',
+          body:     (p.body     as string) ?? '',
+          type:     (p.type     as number) ?? 1,
+          date:     new Date(p.date as number),
+          isRead:   (p.read     as boolean) ?? false,
+          threadId: (p.threadId as string) ?? null,
+          subject:  (p.subject  as string) ?? null,
         },
       });
       break;

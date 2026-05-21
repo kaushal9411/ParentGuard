@@ -43,6 +43,9 @@ export const adminApi = {
   userCalls: (userId: string, deviceId?: string) =>
     adminAxios.get(`/api/admin/users/${userId}/calls`, { params: deviceId ? { deviceId } : {} }),
 
+  userSms: (userId: string, limit = 200, deviceId?: string, search?: string) =>
+    adminAxios.get(`/api/admin/users/${userId}/sms`, { params: { limit, ...(deviceId ? { deviceId } : {}), ...(search ? { search } : {}) } }),
+
   userGallery: (userId: string, type?: 'image' | 'video', deviceId?: string) =>
     adminAxios.get(`/api/admin/users/${userId}/gallery`, { params: { ...(type ? { type } : {}), ...(deviceId ? { deviceId } : {}) } }),
 

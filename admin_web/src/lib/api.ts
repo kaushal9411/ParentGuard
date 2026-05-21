@@ -76,6 +76,12 @@ export const userGalleryApi = {
     api.get('/api/user/gallery', { params: { deviceId, ...(type ? { type } : {}), limit } }),
 };
 
+// ── User: SMS ─────────────────────────────────────────────────────────────────
+export const userSmsApi = {
+  list: (deviceId: string, limit = 200, search?: string) =>
+    api.get('/api/user/sms', { params: { deviceId, limit, ...(search ? { search } : {}) } }),
+};
+
 // ── User: Browsing History ────────────────────────────────────────────────────
 export const userBrowsingApi = {
   list: (deviceId: string, limit = 200, search?: string) =>

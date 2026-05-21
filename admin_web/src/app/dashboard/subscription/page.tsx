@@ -15,7 +15,7 @@ import { getToken } from '@/lib/auth';
 
 interface Features {
   maxDevices: number; location: boolean; notifications: boolean;
-  callLogs: boolean; contacts: boolean; appUsage: boolean;
+  callLogs: boolean; smsLogs: boolean; contacts: boolean; appUsage: boolean;
   gallery: boolean; browsingHistory: boolean; geofencing: boolean;
   appBlocking: boolean; remoteCommands: boolean; historyDays: number;
 }
@@ -42,6 +42,7 @@ const FEATURE_LIST: [keyof Features, string, string][] = [
   ['location',        'Location Tracking',   'Real-time GPS tracking'],
   ['notifications',   'Notifications',       'App notification monitoring'],
   ['callLogs',        'Call Logs',           'Incoming & outgoing call history'],
+  ['smsLogs',         'SMS Messages',        'Read sent and received text messages'],
   ['contacts',        'Contacts Sync',       'Device contact list backup'],
   ['appUsage',        'App Usage Stats',     'Time spent per application'],
   ['gallery',         'Gallery & Media',     'Photos and video monitoring'],

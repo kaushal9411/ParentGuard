@@ -88,6 +88,7 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
     final statuses   = await Future.wait([
       permSvc.isLocationGranted(),
       permSvc.isCallLogGranted(),
+      permSvc.isSmsGranted(),
       permSvc.isContactsGranted(),
       permSvc.isMediaGranted(),
       permSvc.isCameraGranted(),

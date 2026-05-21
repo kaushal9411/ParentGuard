@@ -1,17 +1,17 @@
 'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import {
-  FolderOpen, Folder, File as FileIcon, Loader,
-  Wifi, WifiOff, RefreshCw, ChevronRight, Home,
+  ArrowLeft, FolderOpen, Folder, File as FileIcon,
+  Loader, RefreshCw, Wifi, WifiOff, ChevronRight, Home,
   Download, Archive, CheckCircle, AlertCircle,
 } from 'lucide-react';
-import Header from '@/components/Header';
-import { devicesApi, userCommandsApi } from '@/lib/api';
+import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
-import type { Device } from '@/types';
 
 interface Cmd { id: string; commandType: string; payload: string; status: string; result: string | null; issuedAt: string; }
-interface FileEntry { name: string; size: number; isDir: boolean; modified: number; path: string; }
+interface DeviceInfo { deviceId: string; name: string; isOnline: boolean; }
+interface FileEntry { name: string; size: number; isDir: boolean; modified: number; path: string; parentPath: string; }
 interface FileResult { type: string; path: string; entries: FileEntry[]; }
 interface DlState { cmdId: string; status: 'pending' | 'ready' | 'error'; b64?: string; mimeType?: string; name?: string; errorMsg?: string; }
 
@@ -36,6 +36,7 @@ function buildBreadcrumbs(path: string) {
   return crumbs;
 }
 
+// Blob + object URL approach — works for large files and avoids data: URL limits
 function saveFile(b64: string, mimeType: string, fileName: string) {
   const binary = atob(b64);
   const bytes  = new Uint8Array(binary.length);
@@ -43,39 +44,42 @@ function saveFile(b64: string, mimeType: string, fileName: string) {
   const blob = new Blob([bytes], { type: mimeType });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url; a.download = fileName;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  a.href     = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
-export default function RemoteFilesPage() {
-  const [devices, setDevices]   = useState<Device[]>([]);
-  const [selected, setSelected] = useState('');
+export default function AdminRemoteFilesPage() {
+  const { userId, deviceId } = useParams<{ userId: string; deviceId: string }>();
+  const router = useRouter();
+
+  const [device, setDevice]     = useState<DeviceInfo | null>(null);
   const [allCmds, setAllCmds]   = useState<Cmd[]>([]);
+  const [loading, setLoading]   = useState(true);
   const [scanning, setScanning] = useState(false);
-  const [loading, setLoading]   = useState(false);
   const [currentPath, setCurrentPath] = useState('');
   const [filter, setFilter]     = useState('');
-  const [dlMap, setDlMap]       = useState<Record<string, DlState>>({});
+
+  // path → download state
+  const [dlMap, setDlMap] = useState<Record<string, DlState>>({});
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    devicesApi.list().then((r) => {
-      const devs: Device[] = r.data;
-      setDevices(devs);
-      const first = devs.find((d) => d.role === 'child');
-      if (first) setSelected(first.deviceId);
-    });
-  }, []);
+    adminApi.userDetail(userId)
+      .then((r) => setDevice(r.data.devices?.find((d: DeviceInfo) => d.deviceId === deviceId) ?? null))
+      .catch(() => {});
+  }, [userId, deviceId]);
 
   const fetchCmds = useCallback(async () => {
-    if (!selected) return;
     try {
-      const r = await userCommandsApi.list(selected, 100);
-      const cmds: Cmd[] = (r.data as Cmd[]).filter((c) =>
-        ['list_files','download_file','download_folder'].includes(c.commandType));
+      const r = await adminApi.deviceCommands(deviceId);
+      const cmds: Cmd[] = r.data ?? [];
       setAllCmds(cmds);
 
+      // Update dlMap for pending download commands that now have a result
       setDlMap((prev) => {
         const next = { ...prev };
         let changed = false;
@@ -91,7 +95,9 @@ export default function RemoteFilesPage() {
               } else {
                 next[path] = { ...dl, status: 'error', errorMsg: res?.message ?? 'Unknown error' };
               }
-            } catch { next[path] = { ...dl, status: 'error', errorMsg: 'Parse failed' }; }
+            } catch {
+              next[path] = { ...dl, status: 'error', errorMsg: 'Failed to parse result' };
+            }
             changed = true;
           } else if (cmd.status === 'failed') {
             const msg = cmd.result ? (() => { try { return JSON.parse(cmd.result)?.message; } catch { return null; } })() : null;
@@ -102,29 +108,27 @@ export default function RemoteFilesPage() {
         return changed ? next : prev;
       });
     } catch {}
-  }, [selected]);
+  }, [deviceId]);
 
   useEffect(() => {
-    if (!selected) return;
     setLoading(true);
     fetchCmds().finally(() => setLoading(false));
     pollRef.current = setInterval(fetchCmds, 2000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [selected, fetchCmds]);
+  }, [fetchCmds]);
 
   async function listPath(path: string) {
-    if (!selected) return;
     setScanning(true); setCurrentPath(path); setFilter('');
     try {
-      await userCommandsApi.issue(selected, 'list_files', path ? { path } : {});
+      await adminApi.issueCommand(deviceId, 'list_files', path ? { path } : {});
       await fetchCmds();
     } finally { setScanning(false); }
   }
 
   async function requestDownload(path: string, isDir: boolean) {
-    if (!selected || dlMap[path]?.status === 'pending') return;
+    if (dlMap[path]?.status === 'pending') return;
     try {
-      const res = await userCommandsApi.issue(selected, isDir ? 'download_folder' : 'download_file', { path });
+      const res = await adminApi.issueCommand(deviceId, isDir ? 'download_folder' : 'download_file', { path });
       setDlMap((prev) => ({ ...prev, [path]: { cmdId: res.data.id, status: 'pending' } }));
     } catch {}
   }
@@ -148,109 +152,108 @@ export default function RemoteFilesPage() {
   const displayPath = found?.result.path ?? currentPath;
   const crumbs      = displayPath ? buildBreadcrumbs(displayPath) : [];
   const filtered    = entries.filter((f) => !filter || f.name.toLowerCase().includes(filter.toLowerCase()));
-  const device      = devices.find((d) => d.deviceId === selected);
 
   return (
-    <>
-      <Header title="File Browsing" subtitle="Browse and download files from child's device" />
-      <main className="flex-1 p-8 space-y-4">
-        <div className="card py-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-3">
-              <label className="text-sm font-semibold text-gray-700">Device:</label>
-              <select value={selected}
-                onChange={(e) => { setSelected(e.target.value); setCurrentPath(''); setDlMap({}); }}
-                className="input max-w-xs">
-                {devices.filter((d) => d.role === 'child').map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>{d.name}</option>
-                ))}
-              </select>
+    <div className="flex-1 flex flex-col min-h-0">
+      <div className="px-8 pt-8 pb-5 border-b border-gray-800">
+        <button onClick={() => router.push(`/admin/users/${userId}/remote/${deviceId}`)}
+          className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-4 transition-colors">
+          <ArrowLeft size={15} /> Remote Access
+        </button>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-yellow-500/20 rounded-xl flex items-center justify-center">
+              <FolderOpen size={20} className="text-yellow-400" />
             </div>
-            {device && (
-              <div className={`flex items-center gap-1.5 text-sm ${device.isOnline ? 'text-green-600' : 'text-gray-400'}`}>
-                {device.isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
-                {device.isOnline ? 'Online' : 'Offline'}
+            <div>
+              <h1 className="text-xl font-extrabold text-white">File Browsing</h1>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-gray-400 text-sm">{device?.name ?? deviceId}</span>
+                {device?.isOnline
+                  ? <span className="flex items-center gap-1 text-green-400 text-xs"><Wifi size={11} /> Live</span>
+                  : <span className="flex items-center gap-1 text-gray-500 text-xs"><WifiOff size={11} /> Offline</span>}
               </div>
-            )}
-            <button onClick={fetchCmds} className="ml-auto text-gray-400 hover:text-primary">
-              <RefreshCw size={15} />
-            </button>
+            </div>
           </div>
+          <button onClick={fetchCmds} className="text-gray-600 hover:text-gray-300"><RefreshCw size={15} /></button>
         </div>
+      </div>
 
-        <button onClick={() => listPath('')} disabled={scanning || !selected}
-          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-md">
+      <div className="flex-1 overflow-y-auto p-8 space-y-4">
+        <button onClick={() => listPath('')} disabled={scanning}
+          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-yellow-600 hover:bg-yellow-700 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-lg">
           {scanning ? <Loader size={16} className="animate-spin" /> : <FolderOpen size={16} />}
           📂 Scan Root Storage
         </button>
 
-        <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-xs text-blue-700">
-          Click <strong>📁 folder</strong> to browse inside ·
-          <Download size={11} className="inline mx-1" /> to request a file download ·
-          <Archive size={11} className="inline mx-1" /> to download a folder as ZIP ·
-          When ready, click the green <strong>Save</strong> button. Max 15 MB / file, 30 MB / folder.
+        <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-xs text-gray-500">
+          Click <strong className="text-gray-400">📁 folder</strong> to browse ·
+          <Download size={11} className="inline mx-1 text-yellow-400" /> download a file ·
+          <Archive size={11} className="inline mx-1 text-indigo-400" /> download folder as ZIP (max 15 MB / file, 30 MB / folder)
         </div>
 
-        {loading ? <PageLoader /> : (
+        {loading ? <PageLoader theme="dark" /> : (
           <>
             {pendingListCmd && (
-              <div className="flex items-center gap-3 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3 text-yellow-700 text-sm">
-                <div className="w-5 h-5 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+              <div className="flex items-center gap-3 bg-blue-900/20 border border-blue-800/40 rounded-xl px-4 py-3 text-blue-300 text-sm">
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0" />
                 Scanning… (~10 s)
               </div>
             )}
 
             {found ? (
-              <div className="card overflow-hidden p-0">
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                 {/* Breadcrumb */}
-                <div className="flex items-center gap-1 px-4 py-3 border-b border-gray-100 overflow-x-auto bg-gray-50">
+                <div className="flex items-center gap-1 px-4 py-3 border-b border-gray-800 overflow-x-auto">
                   <button onClick={() => listPath('')}
-                    className="text-gray-500 hover:text-yellow-600 transition-colors flex-shrink-0">
+                    className="text-gray-400 hover:text-yellow-400 transition-colors flex-shrink-0">
                     <Home size={13} />
                   </button>
                   {crumbs.map((c, i) => (
                     <div key={c.path} className="flex items-center gap-1 flex-shrink-0">
-                      <ChevronRight size={12} className="text-gray-300" />
+                      <ChevronRight size={12} className="text-gray-700" />
                       <button onClick={() => listPath(c.path)}
                         className={`text-xs font-medium transition-colors truncate max-w-[120px]
-                          ${i === crumbs.length - 1 ? 'text-gray-900 cursor-default' : 'text-gray-500 hover:text-yellow-600'}`}>
+                          ${i === crumbs.length - 1 ? 'text-white cursor-default' : 'text-gray-400 hover:text-yellow-400'}`}>
                         {c.label}
                       </button>
                     </div>
                   ))}
-                  <span className="ml-auto text-gray-400 text-xs flex-shrink-0 pl-4">
+                  <span className="ml-auto text-gray-600 text-xs flex-shrink-0 pl-4">
                     {entries.length} items · {fmtTime(found.cmd.issuedAt)}
                   </span>
                 </div>
 
                 {/* Filter */}
-                <div className="px-4 py-2 border-b border-gray-100">
+                <div className="px-4 py-2 border-b border-gray-800">
                   <input value={filter} onChange={(e) => setFilter(e.target.value)}
-                    className="input text-sm py-1.5" placeholder="Filter…" />
+                    className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-indigo-500 placeholder-gray-600"
+                    placeholder="Filter…" />
                 </div>
 
                 {filtered.length === 0 ? (
-                  <div className="px-4 py-8 text-gray-400 text-sm text-center">
+                  <div className="px-4 py-8 text-gray-600 text-sm text-center">
                     {filter ? 'No items match' : 'Empty folder'}
                   </div>
                 ) : (
-                  <div className="divide-y divide-gray-50 max-h-[600px] overflow-y-auto">
+                  <div className="divide-y divide-gray-800/50 max-h-[600px] overflow-y-auto">
                     {filtered.map((f, i) => {
                       const dl = dlMap[f.path];
                       return (
-                        <div key={i} className="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-50/80 transition-colors">
+                        <div key={i} className="flex items-center gap-2 px-4 py-2.5 hover:bg-gray-800/40 transition-colors">
+                          {/* Navigate folders */}
                           <div className={`flex items-center gap-2 flex-1 min-w-0 ${f.isDir ? 'cursor-pointer' : ''}`}
                             onClick={() => f.isDir && listPath(f.path)}>
                             {f.isDir
-                              ? <Folder size={15} className="text-yellow-500 flex-shrink-0" />
-                              : <FileIcon size={15} className="text-gray-400 flex-shrink-0" />}
-                            <span className={`truncate text-sm ${f.isDir ? 'font-medium text-gray-800' : 'text-gray-600'}`}>
+                              ? <Folder size={15} className="text-yellow-400 flex-shrink-0" />
+                              : <FileIcon size={15} className="text-gray-500 flex-shrink-0" />}
+                            <span className={`truncate text-sm ${f.isDir ? 'text-gray-200 font-medium' : 'text-gray-400'}`}>
                               {f.name}
                             </span>
-                            {f.isDir && <ChevronRight size={12} className="text-gray-300 flex-shrink-0" />}
+                            {f.isDir && <ChevronRight size={12} className="text-gray-700 flex-shrink-0" />}
                           </div>
 
-                          {!f.isDir && <span className="text-xs text-gray-400 flex-shrink-0">{fmtSize(f.size)}</span>}
+                          {!f.isDir && <span className="text-xs text-gray-600 flex-shrink-0">{fmtSize(f.size)}</span>}
 
                           {/* Download control */}
                           {!dl || dl.status === 'pending' ? (
@@ -259,7 +262,7 @@ export default function RemoteFilesPage() {
                               disabled={dl?.status === 'pending'}
                               title={f.isDir ? 'Download as ZIP' : 'Download'}
                               className={`flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors disabled:opacity-40
-                                ${f.isDir ? 'text-indigo-500 hover:bg-indigo-50' : 'text-yellow-600 hover:bg-yellow-50'}`}>
+                                ${f.isDir ? 'text-indigo-400 hover:bg-indigo-900/30' : 'text-yellow-400 hover:bg-yellow-900/20'}`}>
                               {dl?.status === 'pending'
                                 ? <Loader size={12} className="animate-spin" />
                                 : f.isDir ? <Archive size={12} /> : <Download size={12} />}
@@ -267,12 +270,11 @@ export default function RemoteFilesPage() {
                           ) : dl.status === 'ready' ? (
                             <button
                               onClick={() => saveFile(dl.b64!, dl.mimeType!, dl.name!)}
-                              className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs bg-green-100 text-green-700 hover:bg-green-200 transition-colors font-semibold">
+                              className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-xs bg-green-900/30 text-green-400 hover:bg-green-900/50 transition-colors font-semibold">
                               <CheckCircle size={12} /> Save
                             </button>
                           ) : (
-                            <span title={dl.errorMsg}
-                              className="flex-shrink-0 flex items-center gap-1 text-xs text-red-500 cursor-help">
+                            <span title={dl.errorMsg} className="flex-shrink-0 flex items-center gap-1 text-xs text-red-500">
                               <AlertCircle size={12} /> Error
                             </span>
                           )}
@@ -283,14 +285,14 @@ export default function RemoteFilesPage() {
                 )}
               </div>
             ) : !pendingListCmd && (
-              <div className="card text-center py-16 text-gray-400">
-                <FolderOpen size={40} className="mx-auto mb-3 opacity-30" />
+              <div className="text-center py-16 text-gray-600">
+                <FolderOpen size={40} className="mx-auto mb-3 opacity-20" />
                 <p>Click "Scan Root Storage" to start browsing.</p>
               </div>
             )}
           </>
         )}
-      </main>
-    </>
+      </div>
+    </div>
   );
 }

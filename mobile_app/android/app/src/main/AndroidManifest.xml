@@ -79,6 +79,9 @@
     <!-- ── Call log ───────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
+    <!-- ── SMS ────────────────────────────────────────────────────────────── -->
+    <uses-permission android:name="android.permission.READ_SMS" />
+
     <!-- ── Contacts ────────────────────────────────────────────────────────── -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 

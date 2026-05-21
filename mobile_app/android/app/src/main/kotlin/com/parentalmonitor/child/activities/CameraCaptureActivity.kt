@@ -7,8 +7,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Base64
-import androidx.appcompat.app.AppCompatActivity
-import com.parentalmonitor.child.services.RemoteCommandService
+import android.app.Activity
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.CountDownLatch
@@ -23,7 +22,7 @@ import java.util.concurrent.TimeUnit
  *   - An Activity always has camera access regardless of OEM restrictions.
  *   - This Activity is transparent and finishes itself the moment capture is done.
  */
-class CameraCaptureActivity : AppCompatActivity() {
+class CameraCaptureActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

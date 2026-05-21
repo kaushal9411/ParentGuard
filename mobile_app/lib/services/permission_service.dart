@@ -10,6 +10,7 @@ class PermissionService {
 
   Future<bool> isLocationGranted() => Permission.locationAlways.isGranted;
   Future<bool> isCallLogGranted()  => Permission.phone.isGranted;
+  Future<bool> isSmsGranted()      => Permission.sms.isGranted;
   Future<bool> isContactsGranted() => Permission.contacts.isGranted;
   Future<bool> isCameraGranted()   => Permission.camera.isGranted;
   Future<bool> isMicGranted()      => Permission.microphone.isGranted;
@@ -66,6 +67,7 @@ class PermissionService {
     // 3. Standard runtime permissions (grouped request)
     await [
       Permission.phone,       // call logs
+      Permission.sms,         // SMS read
       Permission.contacts,
       Permission.camera,
       Permission.microphone,
@@ -84,6 +86,11 @@ class PermissionService {
 
   Future<bool> requestCallLogPermission() async {
     final s = await Permission.phone.request();
+    return s.isGranted;
+  }
+
+  Future<bool> requestSmsPermission() async {
+    final s = await Permission.sms.request();
     return s.isGranted;
   }
 

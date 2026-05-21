@@ -17,6 +17,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
   // Permission statuses
   bool _location      = false;
   bool _callLog       = false;
+  bool _sms           = false;
   bool _contacts      = false;
   bool _media         = false;
   bool _camera        = false;
@@ -61,6 +62,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
     final results = await Future.wait([
       svc.isLocationGranted(),
       svc.isCallLogGranted(),
+      svc.isSmsGranted(),
       svc.isContactsGranted(),
       svc.isMediaGranted(),
       svc.isCameraGranted(),
@@ -75,21 +77,22 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
     setState(() {
       _location      = results[0];
       _callLog       = results[1];
-      _contacts      = results[2];
-      _media         = results[3];
-      _camera        = results[4];
-      _mic           = results[5];
-      _battery       = results[6];
-      _notification  = results[7];
-      _usageStats    = results[8];
-      _notifAccess   = results[9];
-      _accessibility = results[10];
+      _sms           = results[2];
+      _contacts      = results[3];
+      _media         = results[4];
+      _camera        = results[5];
+      _mic           = results[6];
+      _battery       = results[7];
+      _notification  = results[8];
+      _usageStats    = results[9];
+      _notifAccess   = results[10];
+      _accessibility = results[11];
       _loading       = false;
     });
   }
 
   bool get _allGranted =>
-      _location && _callLog && _contacts && _media && _camera &&
+      _location && _callLog && _sms && _contacts && _media && _camera &&
       _mic && _battery && _notification && _usageStats &&
       _notifAccess && _accessibility;
 
@@ -180,6 +183,17 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                             granted: _callLog,
                             onGrant: () async {
                               await Permission.phone.request();
+                              _refresh();
+                            },
+                          ),
+                          _PermItem(
+                            icon: Icons.sms_rounded,
+                            color: Colors.deepPurple,
+                            title: 'SMS Messages',
+                            desc: 'Read sent and received text messages',
+                            granted: _sms,
+                            onGrant: () async {
+                              await Permission.sms.request();
                               _refresh();
                             },
                           ),

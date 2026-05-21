@@ -91,7 +91,7 @@ export default function RemoteQuickPage() {
     if (!selected) return;
     setLoading(true);
     fetchCommands().finally(() => setLoading(false));
-    pollRef.current = setInterval(fetchCommands, 5000);
+    pollRef.current = setInterval(fetchCommands, 2000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [selected, fetchCommands]);
 

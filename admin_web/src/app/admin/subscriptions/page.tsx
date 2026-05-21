@@ -12,7 +12,7 @@ import PageLoader from '@/components/PageLoader';
 
 interface Features {
   maxDevices: number; location: boolean; notifications: boolean;
-  callLogs: boolean; contacts: boolean; appUsage: boolean;
+  callLogs: boolean; smsLogs: boolean; contacts: boolean; appUsage: boolean;
   gallery: boolean; browsingHistory: boolean; geofencing: boolean;
   appBlocking: boolean; remoteCommands: boolean; historyDays: number;
 }
@@ -38,6 +38,7 @@ const FEATURE_LABELS: [keyof Features, string][] = [
   ['location',        'Location Tracking'],
   ['notifications',   'Notifications'],
   ['callLogs',        'Call Logs'],
+  ['smsLogs',         'SMS Messages'],
   ['contacts',        'Contacts'],
   ['appUsage',        'App Usage'],
   ['gallery',         'Gallery & Media'],
@@ -72,7 +73,7 @@ function statusBadge(status: string) {
 
 // ─── Default features ─────────────────────────────────────────────────────────
 const DEFAULT_FEATURES: Features = {
-  maxDevices: 1, location: true, notifications: true, callLogs: false,
+  maxDevices: 1, location: true, notifications: true, callLogs: false, smsLogs: false,
   contacts: false, appUsage: false, gallery: false, browsingHistory: false,
   geofencing: false, appBlocking: false, remoteCommands: false, historyDays: 30,
 };

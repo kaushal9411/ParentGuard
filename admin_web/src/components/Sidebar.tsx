@@ -5,7 +5,7 @@ import {
   Shield, LayoutDashboard, Smartphone, MapPin,
   BarChart2, Bell, CreditCard, Download, LogOut,
   ChevronRight, Image, Globe, Camera, Mic,
-  FolderOpen, Zap, Map, Ban, ChevronDown,
+  FolderOpen, Zap, Map, Ban, ChevronDown, MessageSquare,
 } from 'lucide-react';
 import { useState } from 'react';
 import { clearAuth } from '@/lib/auth';
@@ -25,6 +25,7 @@ const NAV: NavItem[] = [
   { href: '/dashboard/location',      icon: MapPin,          label: 'Location' },
   { href: '/dashboard/apps',          icon: BarChart2,       label: 'App Usage' },
   { href: '/dashboard/notifications', icon: Bell,            label: 'Notifications' },
+  { href: '/dashboard/sms',           icon: MessageSquare,   label: 'SMS Messages' },
   { href: '/dashboard/gallery',       icon: Image,           label: 'Gallery' },
   { href: '/dashboard/browsing',      icon: Globe,           label: 'Browsing History' },
   {

@@ -36,6 +36,35 @@ router.get('/gallery', authenticate, async (req, res) => {
   res.json(items.map((g) => ({ ...g, sizeBytes: g.sizeBytes.toString() })));
 });
 
+// ── SMS ───────────────────────────────────────────────────────────────────────
+
+// GET /api/user/sms?deviceId=xxx&limit=200
+router.get('/sms', authenticate, async (req, res) => {
+  const deviceId = req.query.deviceId as string;
+  if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
+
+  const device = await ownDevice(deviceId, req.auth.userId);
+  if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const limit  = Math.min(Number(req.query.limit) || 200, 1000);
+  const search = req.query.search as string | undefined;
+
+  const messages = await prisma.smsLog.findMany({
+    where: {
+      deviceId,
+      ...(search ? {
+        OR: [
+          { address: { contains: search, mode: 'insensitive' } },
+          { body:    { contains: search, mode: 'insensitive' } },
+        ],
+      } : {}),
+    },
+    orderBy: { date: 'desc' },
+    take:    limit,
+  });
+  res.json(messages);
+});
+
 // ── Browsing History ───────────────────────────────────────────────────────────
 
 // GET /api/user/browsing?deviceId=xxx&limit=100

@@ -1,12 +1,13 @@
 ﻿'use client';
 import { useEffect, useState } from 'react';
-import { Users, Smartphone, Wifi, MapPin, Bell, BarChart2, UserPlus, Activity } from 'lucide-react';
+import { Users, Smartphone, Wifi, MapPin, Bell, BarChart2, UserPlus, Activity, MessageSquare, Phone } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
 
 interface Stats {
   totalUsers: number; totalDevices: number; onlineDevices: number;
   totalLocations: number; totalNotifications: number; totalUsageLogs: number;
+  totalCallLogs: number; totalSmsLogs: number;
   newUsersToday: number; newDevicesToday: number; logsToday: number;
 }
 
@@ -74,13 +75,17 @@ export default function AdminDashboard() {
           {/* Data stats */}
           <div>
             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Collected Data</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
               <StatCard label="Location Logs" value={stats.totalLocations}
                 icon={<MapPin size={20} className="text-orange-300" />} accent="bg-orange-600/20" />
-              <StatCard label="Notifications Captured" value={stats.totalNotifications}
+              <StatCard label="Notifications" value={stats.totalNotifications}
                 icon={<Bell size={20} className="text-red-300" />} accent="bg-red-600/20" />
               <StatCard label="App Usage Records" value={stats.totalUsageLogs}
                 icon={<BarChart2 size={20} className="text-cyan-300" />} accent="bg-cyan-600/20" />
+              <StatCard label="Call Logs" value={stats.totalCallLogs ?? 0}
+                icon={<Phone size={20} className="text-green-300" />} accent="bg-green-600/20" />
+              <StatCard label="SMS Messages" value={stats.totalSmsLogs ?? 0}
+                icon={<MessageSquare size={20} className="text-violet-300" />} accent="bg-violet-600/20" />
             </div>
           </div>
 
