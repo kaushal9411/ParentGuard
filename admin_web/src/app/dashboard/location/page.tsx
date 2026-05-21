@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import { MapPin, Navigation, Clock, ExternalLink } from 'lucide-react';
 import Header from '@/components/Header';
 import { devicesApi, locationApi } from '@/lib/api';
 import type { Device, LocationLog } from '@/types';
+import PageLoader from '@/components/PageLoader';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -87,9 +88,7 @@ export default function LocationPage() {
           {/* Map */}
           <div className="xl:col-span-3 card p-0 overflow-hidden" style={{ height: '460px' }}>
             {loading ? (
-              <div className="flex items-center justify-center h-full text-gray-400">
-                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-              </div>
+              <PageLoader />
             ) : !latest ? (
               <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-3">
                 <MapPin size={48} className="opacity-20" />

@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import { Users, Smartphone, Wifi, MapPin, Bell, BarChart2, UserPlus, Activity } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
+import PageLoader from '@/components/PageLoader';
 
 interface Stats {
   totalUsers: number; totalDevices: number; onlineDevices: number;
@@ -52,9 +53,7 @@ export default function AdminDashboard() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <PageLoader theme="dark" />
       ) : stats ? (
         <>
           {/* Platform stats */}

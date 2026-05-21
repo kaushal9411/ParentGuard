@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import { Bell, MessageSquare, Filter } from 'lucide-react';
 import Header from '@/components/Header';
 import { devicesApi, notificationsApi } from '@/lib/api';
 import type { Device, NotificationLog } from '@/types';
+import PageLoader from '@/components/PageLoader';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -100,9 +101,7 @@ export default function NotificationsPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
+          <PageLoader />
         ) : filtered.length === 0 ? (
           <div className="card text-center py-20">
             <Bell size={56} className="mx-auto mb-4 text-gray-200" />

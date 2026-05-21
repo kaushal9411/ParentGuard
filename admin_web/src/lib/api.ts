@@ -69,3 +69,47 @@ export const notificationsApi = {
   list: (deviceId: string, limit = 50) =>
     api.get(`/api/notifications/${deviceId}`, { params: { limit } }),
 };
+
+// ── User: Gallery ─────────────────────────────────────────────────────────────
+export const userGalleryApi = {
+  list: (deviceId: string, type?: 'image' | 'video', limit = 200) =>
+    api.get('/api/user/gallery', { params: { deviceId, ...(type ? { type } : {}), limit } }),
+};
+
+// ── User: Browsing History ────────────────────────────────────────────────────
+export const userBrowsingApi = {
+  list: (deviceId: string, limit = 200, search?: string) =>
+    api.get('/api/user/browsing', { params: { deviceId, limit, ...(search ? { search } : {}) } }),
+};
+
+// ── User: Remote Commands ─────────────────────────────────────────────────────
+export const userCommandsApi = {
+  list:  (deviceId: string, limit = 50) =>
+    api.get('/api/user/commands', { params: { deviceId, limit } }),
+  issue: (deviceId: string, commandType: string, payload?: Record<string, unknown>) =>
+    api.post('/api/user/commands', { deviceId, commandType, payload }),
+};
+
+// ── User: Geofences ───────────────────────────────────────────────────────────
+export const userGeofencesApi = {
+  list:   (deviceId: string) =>
+    api.get('/api/user/geofences', { params: { deviceId } }),
+  create: (data: { deviceId: string; name: string; latitude: number; longitude: number; radiusM: number }) =>
+    api.post('/api/user/geofences', data),
+  update: (id: string, data: { isActive?: boolean; name?: string; radiusM?: number }) =>
+    api.patch(`/api/user/geofences/${id}`, data),
+  delete: (id: string) =>
+    api.delete(`/api/user/geofences/${id}`),
+};
+
+// ── User: App Block Rules ─────────────────────────────────────────────────────
+export const userAppBlocksApi = {
+  list:   (deviceId: string) =>
+    api.get('/api/user/app-blocks', { params: { deviceId } }),
+  create: (data: { deviceId: string; packageName: string; appName: string; isBlocked?: boolean }) =>
+    api.post('/api/user/app-blocks', data),
+  update: (id: string, isBlocked: boolean) =>
+    api.patch(`/api/user/app-blocks/${id}`, { isBlocked }),
+  delete: (id: string) =>
+    api.delete(`/api/user/app-blocks/${id}`),
+};

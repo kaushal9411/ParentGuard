@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import { BarChart2, Clock } from 'lucide-react';
 import {
@@ -7,6 +7,7 @@ import {
 import Header from '@/components/Header';
 import { devicesApi, usageApi } from '@/lib/api';
 import type { Device, AppUsageLog } from '@/types';
+import PageLoader from '@/components/PageLoader';
 
 function msToHm(ms: number): string {
   const m = Math.round(ms / 60000);
@@ -80,9 +81,7 @@ export default function AppsPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
+          <PageLoader />
         ) : logs.length === 0 ? (
           <div className="card text-center py-20">
             <BarChart2 size={56} className="mx-auto mb-4 text-gray-200" />

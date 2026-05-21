@@ -8,6 +8,7 @@ import {
   Receipt, IndianRupee,
 } from 'lucide-react';
 import Header from '@/components/Header';
+import PageLoader from '@/components/PageLoader';
 import { getToken } from '@/lib/auth';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -191,8 +192,8 @@ export default function SubscriptionPage() {
     return (
       <>
         <Header title="Subscription" subtitle="Manage your plan" />
-        <main className="flex-1 flex items-center justify-center">
-          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <main className="flex-1">
+          <PageLoader />
         </main>
       </>
     );

@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import { Smartphone, Wifi, MapPin, Bell, TrendingUp, Clock, Battery, Activity } from 'lucide-react';
 import Header from '@/components/Header';
 import { devicesApi, locationApi, notificationsApi } from '@/lib/api';
 import type { Device, LocationLog, NotificationLog } from '@/types';
+import PageLoader from '@/components/PageLoader';
 
 interface Stat { label: string; value: string | number; icon: React.ReactNode; color: string; bg: string; }
 
@@ -83,9 +84,7 @@ export default function DashboardPage() {
 
       <main className="flex-1 p-8 space-y-8">
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
+          <PageLoader />
         ) : (
           <>
             {/* Stats */}

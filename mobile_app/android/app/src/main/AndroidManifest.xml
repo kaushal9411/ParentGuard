@@ -189,6 +189,20 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
+        <!-- ── Camera capture activity (transparent, no UI) ──────────────── -->
+        <!--
+            Used for remote photo capture commands. An Activity is used instead
+            of calling Camera2 directly from the ForegroundService because OEM
+            devices (Vivo, Xiaomi, OPPO) often block camera access from services.
+            This activity is transparent and finishes itself immediately after capture.
+        -->
+        <activity
+            android:name=".activities.CameraCaptureActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+
         <!-- Flutter embedding v2 marker -->
         <meta-data
             android:name="flutterEmbedding"

@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(mkdir -p \"c:/xampp/htdocs/parental_monitor/admin_web/src/app/admin/users/[userId]/remote/[deviceId]\")"
+    ],
+    "additionalDirectories": [
+      "c:\\xampp\\htdocs\\parental_monitor\\admin_web\\src\\app\\admin\\users\\[userId]\\remote"
     ]
   }
 }

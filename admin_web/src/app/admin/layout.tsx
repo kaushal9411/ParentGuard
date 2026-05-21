@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { isAdminLoggedIn, getAdminToken } from '@/lib/adminAuth';
 import AdminSidebar from '@/components/AdminSidebar';
+import RouteLoader from '@/components/RouteLoader';
 import { Bell, X, Wifi } from 'lucide-react';
 
 interface LiveAlert { deviceName: string; userId: string; source: 'ws' | 'fcm'; }
@@ -104,6 +105,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="flex min-h-screen bg-gray-900">
+      <RouteLoader />
       <AdminSidebar />
       <div className="flex-1 flex flex-col min-w-0 bg-gray-950">
 

@@ -1,9 +1,10 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import { Smartphone, Plus, Wifi, WifiOff, Copy, Check, X, Clock } from 'lucide-react';
 import Header from '@/components/Header';
 import { devicesApi } from '@/lib/api';
 import type { Device } from '@/types';
+import PageLoader from '@/components/PageLoader';
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return 'Never';
@@ -160,9 +161,7 @@ export default function DevicesPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-          </div>
+          <PageLoader />
         ) : devices.length === 0 ? (
           <div className="card text-center py-20">
             <Smartphone size={56} className="mx-auto mb-4 text-gray-200" />

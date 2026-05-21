@@ -7,6 +7,7 @@ import {
   ChevronDown, ChevronUp, Search,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
+import PageLoader from '@/components/PageLoader';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -314,9 +315,7 @@ export default function DevicesPage() {
       {/* Content */}
       <div className="flex-1 p-8 overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center h-48">
-            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          </div>
+          <PageLoader theme="dark" />
         ) : filtered.length === 0 ? (
           <div className="text-center text-gray-500 py-16">
             <Smartphone size={40} className="mx-auto mb-3 opacity-30" />

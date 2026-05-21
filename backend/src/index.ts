@@ -19,6 +19,7 @@ import fcmRouter from './routes/fcm';
 import subscriptionRouter from './routes/subscriptions';
 import downloadsRouter from './routes/downloads';
 import consentRouter from './routes/consent';
+import userRouter from './routes/user';
 
 const app = express();
 const httpServer = createServer(app);
@@ -55,6 +56,7 @@ app.use('/api/subscription/webhook', express.json());
 app.use('/api/subscription', subscriptionRouter);
 app.use('/api/downloads',   downloadsRouter);
 app.use('/api/consent',     consentRouter);
+app.use('/api/user',        userRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
