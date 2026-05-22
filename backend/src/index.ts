@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import path from 'path';
 import express from 'express';
+import { prisma } from './config/database';
 import { createServer } from 'http';
 import cors from 'cors';
 import passport from 'passport';
@@ -20,6 +21,7 @@ import subscriptionRouter from './routes/subscriptions';
 import downloadsRouter from './routes/downloads';
 import consentRouter from './routes/consent';
 import userRouter from './routes/user';
+import inquiriesRouter from './routes/inquiries';
 
 const app = express();
 const httpServer = createServer(app);
@@ -57,12 +59,29 @@ app.use('/api/subscription', subscriptionRouter);
 app.use('/api/downloads',   downloadsRouter);
 app.use('/api/consent',     consentRouter);
 app.use('/api/user',        userRouter);
+app.use('/api/inquiries',   inquiriesRouter);
 
 // ── Global error handler ──────────────────────────────────────────────────────
 app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[ERROR]', err.message);
   res.status(500).json({ error: 'Internal server error' });
 });
+
+// ── Auto-expire subscriptions (runs every hour) ───────────────────────────────
+async function autoExpireSubscriptions() {
+  try {
+    const { count } = await prisma.userSubscription.updateMany({
+      where: { status: 'active', expiresAt: { lt: new Date() } },
+      data:  { status: 'expired' },
+    });
+    if (count > 0) console.log(`[subscription] Auto-expired ${count} subscription(s)`);
+  } catch (e) {
+    console.error('[subscription] Auto-expire error:', e);
+  }
+}
+// Run immediately on startup, then every hour
+autoExpireSubscriptions();
+setInterval(autoExpireSubscriptions, 60 * 60 * 1000);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT ?? 3000);

@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth';
+import { checkDeviceLimit } from '../middleware/feature';
 import { GALLERY_UPLOADS_DIR } from './gallery';
 
 const router = Router();
@@ -15,7 +16,7 @@ const CreateDeviceSchema = z.object({
 });
 
 // POST /api/devices — web portal creates a child device
-router.post('/', authenticate, async (req, res) => {
+router.post('/', authenticate, checkDeviceLimit, async (req, res) => {
   const parsed = CreateDeviceSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.flatten().fieldErrors });

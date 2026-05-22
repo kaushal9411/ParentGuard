@@ -88,11 +88,27 @@ export const adminApi = {
   getPaymentHistory: () =>
     adminAxios.get('/api/subscription/admin/payment-history'),
 
+  // ── Inquiries ────────────────────────────────────────────────────────────
+  getInquiries: (status?: string) =>
+    adminAxios.get('/api/inquiries', { params: status ? { status } : {} }),
+
+  updateInquiry: (id: string, data: { status?: string; notes?: string }) =>
+    adminAxios.patch(`/api/inquiries/${id}`, data),
+
+  deleteInquiry: (id: string) =>
+    adminAxios.delete(`/api/inquiries/${id}`),
+
   deleteUser: (userId: string) =>
     adminAxios.delete(`/api/admin/users/${userId}`),
 
+  deleteUserData: (userId: string) =>
+    adminAxios.delete(`/api/admin/users/${userId}/data`),
+
   deleteDevice: (deviceId: string) =>
     adminAxios.delete(`/api/admin/devices/${deviceId}`),
+
+  deleteDeviceData: (deviceId: string) =>
+    adminAxios.delete(`/api/admin/devices/${deviceId}/data`),
 
   // ── Remote commands ──────────────────────────────────────────────────────
   issueCommand: (deviceId: string, commandType: string, payload?: Record<string, unknown>) =>

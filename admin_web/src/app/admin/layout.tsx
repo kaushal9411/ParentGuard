@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { isAdminLoggedIn, getAdminToken } from '@/lib/adminAuth';
 import AdminSidebar from '@/components/AdminSidebar';
 import RouteLoader from '@/components/RouteLoader';
+import { Toaster } from 'sonner';
 import { Bell, X, Wifi } from 'lucide-react';
 
 interface LiveAlert { deviceName: string; userId: string; source: 'ws' | 'fcm'; }
@@ -134,6 +135,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         )}
 
         {children}
+
+        <Toaster position="top-right" theme="dark" richColors closeButton />
 
         {/* WebSocket live indicator (bottom-right) */}
         <div className={`fixed bottom-4 right-4 flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all

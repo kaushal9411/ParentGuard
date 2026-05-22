@@ -79,6 +79,7 @@ const PlanSchema = z.object({
     location:        z.boolean(),
     notifications:   z.boolean(),
     callLogs:        z.boolean(),
+    smsLogs:         z.boolean(),
     contacts:        z.boolean(),
     appUsage:        z.boolean(),
     gallery:         z.boolean(),

@@ -5,6 +5,8 @@ import Header from '@/components/Header';
 import { devicesApi, userGeofencesApi } from '@/lib/api';
 import type { Device } from '@/types';
 import PageLoader from '@/components/PageLoader';
+import { confirmDialog } from '@/lib/confirm';
+import { toast } from 'sonner';
 
 interface GeofenceAlert { id: string; type: string; triggeredAt: string; }
 interface Geofence {
@@ -129,11 +131,21 @@ export default function GeofencingPage() {
   }
 
   async function deleteZone(id: string) {
-    if (!confirm('Delete this geofence zone?')) return;
+    const zone = zones.find((z) => z.id === id);
+    const ok = await confirmDialog({
+      title: `Delete zone "${zone?.name ?? ''}"?`,
+      text: 'This geofence zone will be permanently removed from the device.',
+      confirmText: 'Delete Zone',
+      type: 'danger',
+    });
+    if (!ok) return;
     setDeleting(id);
     try {
       await userGeofencesApi.delete(id);
       setZones((prev) => prev.filter((g) => g.id !== id));
+      toast.success(`Zone "${zone?.name}" deleted`);
+    } catch {
+      toast.error('Failed to delete zone');
     } finally { setDeleting(null); }
   }
 

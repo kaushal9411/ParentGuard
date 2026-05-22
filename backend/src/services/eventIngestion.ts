@@ -1,5 +1,20 @@
 import { prisma } from '../config/database';
 import { getIO } from '../config/socket';
+import { getUserFeatures } from '../routes/subscriptions';
+import type { SubscriptionFeatures } from '../types/subscription';
+
+// Map event type → feature key required to store it
+const EVENT_FEATURE_MAP: Partial<Record<string, keyof SubscriptionFeatures>> = {
+  location:       'location',
+  appUsage:       'appUsage',
+  notification:   'notifications',
+  callLog:        'callLogs',
+  smsLog:         'smsLogs',
+  contact:        'contacts',
+  galleryItem:    'gallery',
+  browsingHistory:'browsingHistory',
+  // deviceStatus and geofenceAlert are always stored (no plan gate)
+};
 // broadcastNewData via Soketi removed — Socket.IO handles real-time (same port, no extra server)
 
 export type EventType =
@@ -33,7 +48,22 @@ export async function ingestEvents(
   let processed = 0;
   let failed = 0;
 
+  // Fetch user's plan features once for the whole batch
+  let features: SubscriptionFeatures;
+  try { features = await getUserFeatures(userId); }
+  catch { features = (await import('../types/subscription')).FREE_FEATURES; }
+
   for (const event of events) {
+    // Check if this event type is allowed by the user's plan
+    const featureKey = EVENT_FEATURE_MAP[event.type];
+    if (featureKey) {
+      const allowed = features[featureKey];
+      if (typeof allowed === 'boolean' && !allowed) {
+        // Silently skip events not in plan (don't count as failed)
+        continue;
+      }
+    }
+
     try {
       await ingestOne(deviceId, event);
       processed++;

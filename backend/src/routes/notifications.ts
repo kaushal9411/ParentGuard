@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth';
+import { requireFeature } from '../middleware/feature';
 
 const router = Router();
 
 // GET /api/notifications/:deviceId?limit=50&before=<ISO>
-router.get('/:deviceId', authenticate, async (req, res) => {
+router.get('/:deviceId', authenticate, requireFeature('notifications'), async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 50, 200);
   const before = req.query.before ? new Date(req.query.before as string) : undefined;
 

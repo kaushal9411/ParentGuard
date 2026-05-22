@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth';
+import { requireFeature } from '../middleware/feature';
 
 const router = Router();
 
 // GET /api/usage/:deviceId?date=YYYY-MM-DD (defaults to last 7 days)
-router.get('/:deviceId', authenticate, async (req, res) => {
+router.get('/:deviceId', authenticate, requireFeature('appUsage'), async (req, res) => {
   const device = await prisma.device.findFirst({
     where: { deviceId: req.params.deviceId as string, userId: req.auth.userId },
   });

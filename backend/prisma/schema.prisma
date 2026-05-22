@@ -399,6 +399,22 @@ model GeofenceAlert {
   @@map("geofence_alerts")
 }
 
+// ── Contact inquiries (from landing page) ────────────────────────────────────
+
+model Inquiry {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  message   String
+  status    String   @default("new")  // new | read | replied
+  notes     String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt      @map("updated_at")
+
+  @@map("inquiries")
+}
+
 // ── App block rules ───────────────────────────────────────────────────────────
 
 model AppBlockRule {

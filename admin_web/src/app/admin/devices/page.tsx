@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
+import { confirmDialog, stepConfirm } from '@/lib/confirm';
+import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -237,19 +239,35 @@ export default function DevicesPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleRemoveDevice = useCallback(async (deviceId: string, deviceName: string) => {
-    if (!confirm(`Remove device "${deviceName}" and ALL its data?\n\nThis will permanently delete all location logs, call logs, gallery, browsing history, and notifications for this device.\n\nThis cannot be undone.`)) return;
-
+    const step1 = await confirmDialog({
+      title: `Delete data for "${deviceName}"?`,
+      text: 'This permanently removes all location logs, call logs, gallery, browsing history, SMS, and notifications for this device.',
+      confirmText: 'Yes, delete data',
+      type: 'danger', theme: 'dark',
+    });
+    if (!step1) return;
     setRemovingId(deviceId);
     try {
-      await adminApi.deleteDevice(deviceId);
-      // Remove device from local state without re-fetching
-      setUsers((prev) =>
-        prev
-          .map((u) => ({ ...u, devices: u.devices.filter((d) => d.deviceId !== deviceId) }))
-          .filter((u) => u.devices.length > 0),
-      );
+      await adminApi.deleteDeviceData(deviceId);
+      toast.success(`All data for "${deviceName}" deleted`);
+      const step2 = await stepConfirm({
+        title: 'Data deleted!',
+        text: `All data for "${deviceName}" has been removed. Remove the device registration too?`,
+        confirmText: 'Yes, remove device',
+        cancelText: 'Keep device',
+        theme: 'dark',
+      });
+      if (step2) {
+        await adminApi.deleteDevice(deviceId);
+        setUsers((prev) =>
+          prev
+            .map((u) => ({ ...u, devices: u.devices.filter((d) => d.deviceId !== deviceId) }))
+            .filter((u) => u.devices.length > 0),
+        );
+        toast.success(`Device "${deviceName}" removed`);
+      }
     } catch {
-      alert('Failed to remove device. Please try again.');
+      toast.error(`Failed to delete data for "${deviceName}"`);
     } finally {
       setRemovingId(null);
     }

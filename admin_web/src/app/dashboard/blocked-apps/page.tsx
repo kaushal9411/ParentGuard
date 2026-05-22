@@ -5,6 +5,8 @@ import Header from '@/components/Header';
 import { devicesApi, userAppBlocksApi } from '@/lib/api';
 import type { Device } from '@/types';
 import PageLoader from '@/components/PageLoader';
+import { confirmDialog } from '@/lib/confirm';
+import { toast } from 'sonner';
 
 interface AppBlockRule {
   id: string; deviceId: string;
@@ -131,11 +133,21 @@ export default function BlockedAppsPage() {
   }
 
   async function deleteRule(id: string) {
-    if (!confirm('Remove this block rule?')) return;
+    const rule = rules.find((r) => r.id === id);
+    const ok = await confirmDialog({
+      title: `Remove block for "${rule?.appName ?? ''}"?`,
+      text: 'The app will be accessible on the child\'s device again.',
+      confirmText: 'Remove Block',
+      type: 'warning',
+    });
+    if (!ok) return;
     setDeleting(id);
     try {
       await userAppBlocksApi.delete(id);
       setRules((prev) => prev.filter((x) => x.id !== id));
+      toast.success(`Block removed for "${rule?.appName}"`);
+    } catch {
+      toast.error('Failed to remove block rule');
     } finally { setDeleting(null); }
   }
 

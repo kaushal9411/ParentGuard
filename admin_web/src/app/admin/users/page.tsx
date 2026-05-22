@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { Search, Users, Smartphone, Wifi, WifiOff, Trash2, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
+import { confirmDialog, stepConfirm } from '@/lib/confirm';
+import { toast } from 'sonner';
 
 interface Device { id: string; name: string; role: string; isOnline: boolean; lastSeen: string | null; }
 interface User {
@@ -54,14 +56,32 @@ export default function AdminUsersPage() {
   }
 
   async function deleteUser(id: string, name: string) {
-    if (!confirm(`Delete user "${name}" and ALL their data? This cannot be undone.`)) return;
+    const step1 = await confirmDialog({
+      title: `Delete data for "${name}"?`,
+      text: 'This permanently removes all locations, SMS, calls, notifications, gallery, and browsing history for this user.',
+      confirmText: 'Yes, delete data',
+      type: 'danger', theme: 'dark',
+    });
+    if (!step1) return;
     setDeleting(id);
     try {
-      await adminApi.deleteUser(id);
-      setUsers((u) => u.filter((x) => x.id !== id));
-      setTotal((t) => t - 1);
+      await adminApi.deleteUserData(id);
+      toast.success(`All data for "${name}" deleted`);
+      const step2 = await stepConfirm({
+        title: 'Data deleted!',
+        text: `All monitoring data for "${name}" has been removed. Delete the user account too?`,
+        confirmText: 'Yes, delete account',
+        cancelText: 'Keep account',
+        theme: 'dark',
+      });
+      if (step2) {
+        await adminApi.deleteUser(id);
+        setUsers((u) => u.filter((x) => x.id !== id));
+        setTotal((t) => t - 1);
+        toast.success(`User "${name}" deleted`);
+      }
     } catch {
-      alert('Failed to delete user');
+      toast.error(`Failed to delete data for "${name}"`);
     } finally {
       setDeleting(null);
     }

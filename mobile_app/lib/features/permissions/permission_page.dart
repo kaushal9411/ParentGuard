@@ -2,10 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../services/permission_service.dart';
+import '../../services/subscription_service.dart';
 
 class PermissionPage extends ConsumerStatefulWidget {
-  const PermissionPage({super.key, required this.onComplete});
-  final VoidCallback onComplete;
+  const PermissionPage({
+    super.key,
+    required this.onComplete,
+    this.features = SubscriptionFeatures.free,
+  });
+  final VoidCallback           onComplete;
+  final SubscriptionFeatures   features;
 
   @override
   ConsumerState<PermissionPage> createState() => _PermissionPageState();
@@ -28,8 +34,10 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
   bool _notifAccess   = false;
   bool _accessibility = false;
 
-  bool _loading       = true;
-  bool _requesting    = false;
+  bool _loading = true;
+
+  // Shorthand so we don't repeat widget.features everywhere
+  SubscriptionFeatures get _f => widget.features;
 
   @override
   void initState() {
@@ -44,57 +52,69 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
     super.dispose();
   }
 
-  // Re-check statuses when user returns from Settings
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _refresh();
   }
 
   Future<void> _init() async {
-    // Auto-request all runtime permissions first, then check statuses
     final svc = ref.read(permissionServiceProvider);
-    await svc.requestAllRuntimePermissions();
+    // Only request permissions the plan actually needs
+    await svc.requestPlanPermissions(_f);
     await _refresh();
   }
 
   Future<void> _refresh() async {
     final svc = ref.read(permissionServiceProvider);
-    final results = await Future.wait([
-      svc.isLocationGranted(),
-      svc.isCallLogGranted(),
-      svc.isSmsGranted(),
-      svc.isContactsGranted(),
-      svc.isMediaGranted(),
-      svc.isCameraGranted(),
-      svc.isMicGranted(),
-      svc.isBatteryOptimisationExempt(),
-      svc.isNotificationGranted(),
-      svc.isUsageStatsGranted(),
-      svc.isNotificationAccessGranted(),
-      svc.isAccessibilityGranted(),
-    ]);
+    // Always check the three base permissions
+    // Always check base permissions
+    final loc     = await svc.isLocationGranted();
+    final notif   = await svc.isNotificationGranted();
+    final battery = await svc.isBatteryOptimisationExempt();
+
+    // Conditionally check plan-gated permissions (default true = not required = don't block)
+    final callLog    = _f.callLogs       ? await svc.isCallLogGranted()            : true;
+    final sms        = _f.smsLogs        ? await svc.isSmsGranted()                : true;
+    final contacts   = _f.contacts       ? await svc.isContactsGranted()           : true;
+    final media      = _f.gallery        ? await svc.isMediaGranted()              : true;
+    final camera     = _f.remoteCommands ? await svc.isCameraGranted()             : true;
+    final mic        = _f.remoteCommands ? await svc.isMicGranted()                : true;
+    final usage      = _f.appUsage       ? await svc.isUsageStatsGranted()         : true;
+    final notifAcc   = _f.notifications  ? await svc.isNotificationAccessGranted() : true;
+    final accessib   = (_f.browsingHistory || _f.appBlocking)
+                                         ? await svc.isAccessibilityGranted()      : true;
+
     if (!mounted) return;
     setState(() {
-      _location      = results[0];
-      _callLog       = results[1];
-      _sms           = results[2];
-      _contacts      = results[3];
-      _media         = results[4];
-      _camera        = results[5];
-      _mic           = results[6];
-      _battery       = results[7];
-      _notification  = results[8];
-      _usageStats    = results[9];
-      _notifAccess   = results[10];
-      _accessibility = results[11];
+      _location      = loc;
+      _notification  = notif;
+      _battery       = battery;
+      _callLog       = callLog;
+      _sms           = sms;
+      _contacts      = contacts;
+      _media         = media;
+      _camera        = camera;
+      _mic           = mic;
+      _usageStats    = usage;
+      _notifAccess   = notifAcc;
+      _accessibility = accessib;
       _loading       = false;
     });
   }
 
-  bool get _allGranted =>
-      _location && _callLog && _sms && _contacts && _media && _camera &&
-      _mic && _battery && _notification && _usageStats &&
-      _notifAccess && _accessibility;
+  // _allGranted only checks permissions required by this plan
+  bool get _allGranted {
+    if (!_location || !_notification || !_battery) return false;
+    if (_f.callLogs       && !_callLog)     return false;
+    if (_f.smsLogs        && !_sms)         return false;
+    if (_f.contacts       && !_contacts)    return false;
+    if (_f.gallery        && !_media)       return false;
+    if (_f.remoteCommands && (!_camera || !_mic)) return false;
+    if (_f.appUsage       && !_usageStats)  return false;
+    if (_f.notifications  && !_notifAccess) return false;
+    if ((_f.browsingHistory || _f.appBlocking) && !_accessibility) return false;
+    return true;
+  }
 
   bool get _minimumGranted => _location && _notification;
 
@@ -143,12 +163,14 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                     ),
                   ),
 
-                  // ── Permission list ──────────────────────────────────────
+                  // ── Permission list (filtered by plan) ──────────────────
                   Expanded(
                     child: ListView(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       children: [
-                        _section('STANDARD PERMISSIONS', [
+                        // ── Standard permissions ──────────────────────────
+                        _section('REQUIRED PERMISSIONS', [
+                          // Always required
                           _PermItem(
                             icon: Icons.location_on_rounded,
                             color: Colors.orange,
@@ -156,11 +178,8 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                             desc: 'Track GPS position in background',
                             granted: _location,
                             onGrant: () async {
-                              // Must request foreground first, then background
                               final fg = await Permission.locationWhenInUse.request();
-                              if (fg.isGranted) {
-                                await Permission.locationAlways.request();
-                              }
+                              if (fg.isGranted) await Permission.locationAlways.request();
                               _refresh();
                             },
                           ),
@@ -176,6 +195,20 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                             },
                           ),
                           _PermItem(
+                            icon: Icons.battery_charging_full_rounded,
+                            color: Colors.amber,
+                            title: 'Battery Optimisation',
+                            desc: 'Keep app running reliably in background',
+                            granted: _battery,
+                            isSpecial: true,
+                            onGrant: () async {
+                              await ref.read(permissionServiceProvider)
+                                  .openBatteryOptimizationSettings();
+                            },
+                          ),
+
+                          // Plan-conditional standard permissions
+                          if (_f.callLogs) _PermItem(
                             icon: Icons.phone_rounded,
                             color: Colors.green,
                             title: 'Call Logs',
@@ -186,7 +219,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                               _refresh();
                             },
                           ),
-                          _PermItem(
+                          if (_f.smsLogs) _PermItem(
                             icon: Icons.sms_rounded,
                             color: Colors.deepPurple,
                             title: 'SMS Messages',
@@ -197,7 +230,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                               _refresh();
                             },
                           ),
-                          _PermItem(
+                          if (_f.contacts) _PermItem(
                             icon: Icons.contacts_rounded,
                             color: Colors.teal,
                             title: 'Contacts',
@@ -208,7 +241,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                               _refresh();
                             },
                           ),
-                          _PermItem(
+                          if (_f.gallery) _PermItem(
                             icon: Icons.photo_library_rounded,
                             color: Colors.pink,
                             title: 'Photos & Videos',
@@ -221,7 +254,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                               _refresh();
                             },
                           ),
-                          _PermItem(
+                          if (_f.remoteCommands) _PermItem(
                             icon: Icons.camera_alt_rounded,
                             color: Colors.purple,
                             title: 'Camera',
@@ -232,7 +265,7 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                               _refresh();
                             },
                           ),
-                          _PermItem(
+                          if (_f.remoteCommands) _PermItem(
                             icon: Icons.mic_rounded,
                             color: Colors.red,
                             title: 'Microphone',
@@ -243,63 +276,51 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                               _refresh();
                             },
                           ),
-                          _PermItem(
-                            icon: Icons.battery_charging_full_rounded,
-                            color: Colors.amber,
-                            title: 'Battery Optimisation',
-                            desc: 'Keep app running reliably in background',
-                            granted: _battery,
-                            isSpecial: true,
-                            onGrant: () async {
-                              await ref.read(permissionServiceProvider)
-                                  .openBatteryOptimizationSettings();
-                              // Re-checked via didChangeAppLifecycleState on return
-                            },
-                          ),
                         ]),
 
-                        const SizedBox(height: 8),
-
-                        _section('SPECIAL ACCESS  (tap to open Settings)', [
-                          _PermItem(
-                            icon: Icons.bar_chart_rounded,
-                            color: Colors.indigo,
-                            title: 'Usage Access',
-                            desc: 'Monitor which apps are used and for how long',
-                            granted: _usageStats,
-                            isSpecial: true,
-                            onGrant: () async {
-                              await ref.read(permissionServiceProvider)
-                                  .openUsageStatsSettings();
-                              // Status re-checked via didChangeAppLifecycleState
-                              // when user returns from Settings
-                            },
-                          ),
-                          _PermItem(
-                            icon: Icons.notifications_active_rounded,
-                            color: Colors.deepOrange,
-                            title: 'Notification Access',
-                            desc: 'Capture notifications from all apps',
-                            granted: _notifAccess,
-                            isSpecial: true,
-                            onGrant: () async {
-                              await ref.read(permissionServiceProvider)
-                                  .openNotificationAccessSettings();
-                            },
-                          ),
-                          _PermItem(
-                            icon: Icons.accessibility_new_rounded,
-                            color: Colors.cyan,
-                            title: 'Accessibility Service',
-                            desc: 'App blocking + browser URL monitoring',
-                            granted: _accessibility,
-                            isSpecial: true,
-                            onGrant: () async {
-                              await ref.read(permissionServiceProvider)
-                                  .openAccessibilitySettings();
-                            },
-                          ),
-                        ]),
+                        // ── Special access — only shown if plan needs them ─
+                        if (_f.appUsage || _f.notifications ||
+                            _f.browsingHistory || _f.appBlocking) ...[
+                          const SizedBox(height: 8),
+                          _section('SPECIAL ACCESS  (tap to open Settings)', [
+                            if (_f.appUsage) _PermItem(
+                              icon: Icons.bar_chart_rounded,
+                              color: Colors.indigo,
+                              title: 'Usage Access',
+                              desc: 'Monitor which apps are used and for how long',
+                              granted: _usageStats,
+                              isSpecial: true,
+                              onGrant: () async {
+                                await ref.read(permissionServiceProvider)
+                                    .openUsageStatsSettings();
+                              },
+                            ),
+                            if (_f.notifications) _PermItem(
+                              icon: Icons.notifications_active_rounded,
+                              color: Colors.deepOrange,
+                              title: 'Notification Access',
+                              desc: 'Capture notifications from all apps',
+                              granted: _notifAccess,
+                              isSpecial: true,
+                              onGrant: () async {
+                                await ref.read(permissionServiceProvider)
+                                    .openNotificationAccessSettings();
+                              },
+                            ),
+                            if (_f.browsingHistory || _f.appBlocking) _PermItem(
+                              icon: Icons.accessibility_new_rounded,
+                              color: Colors.cyan,
+                              title: 'Accessibility Service',
+                              desc: 'App blocking + browser URL monitoring',
+                              granted: _accessibility,
+                              isSpecial: true,
+                              onGrant: () async {
+                                await ref.read(permissionServiceProvider)
+                                    .openAccessibilitySettings();
+                              },
+                            ),
+                          ]),
+                        ],
 
                         const SizedBox(height: 16),
                       ],

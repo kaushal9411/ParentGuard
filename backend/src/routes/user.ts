@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth';
+import { requireFeature } from '../middleware/feature';
 
 const router = Router();
 
@@ -18,7 +19,7 @@ async function ownDeviceById(id: string, userId: string) {
 // ── Gallery ────────────────────────────────────────────────────────────────────
 
 // GET /api/user/gallery?deviceId=xxx&type=image|video
-router.get('/gallery', authenticate, async (req, res) => {
+router.get('/gallery', authenticate, requireFeature('gallery'), async (req, res) => {
   const deviceId = req.query.deviceId as string;
   if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
 
@@ -36,10 +37,68 @@ router.get('/gallery', authenticate, async (req, res) => {
   res.json(items.map((g) => ({ ...g, sizeBytes: g.sizeBytes.toString() })));
 });
 
+// ── Call Logs ─────────────────────────────────────────────────────────────────
+
+// GET /api/user/calls?deviceId=xxx&limit=200
+router.get('/calls', authenticate, requireFeature('callLogs'), async (req, res) => {
+  const deviceId = req.query.deviceId as string;
+  if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
+
+  const device = await ownDevice(deviceId, req.auth.userId);
+  if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const limit  = Math.min(Number(req.query.limit) || 200, 500);
+  const search = req.query.search as string | undefined;
+
+  const logs = await prisma.callLog.findMany({
+    where: {
+      deviceId,
+      ...(search ? {
+        OR: [
+          { number: { contains: search, mode: 'insensitive' } },
+          { name:   { contains: search, mode: 'insensitive' } },
+        ],
+      } : {}),
+    },
+    orderBy: { timestamp: 'desc' },
+    take: limit,
+  });
+  res.json(logs);
+});
+
+// ── Contacts ──────────────────────────────────────────────────────────────────
+
+// GET /api/user/contacts?deviceId=xxx&limit=500
+router.get('/contacts', authenticate, requireFeature('contacts'), async (req, res) => {
+  const deviceId = req.query.deviceId as string;
+  if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
+
+  const device = await ownDevice(deviceId, req.auth.userId);
+  if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const limit  = Math.min(Number(req.query.limit) || 500, 2000);
+  const search = req.query.search as string | undefined;
+
+  const contacts = await prisma.contact.findMany({
+    where: {
+      deviceId,
+      ...(search ? {
+        OR: [
+          { name:   { contains: search, mode: 'insensitive' } },
+          { phones: { contains: search, mode: 'insensitive' } },
+        ],
+      } : {}),
+    },
+    orderBy: { name: 'asc' },
+    take: limit,
+  });
+  res.json(contacts);
+});
+
 // ── SMS ───────────────────────────────────────────────────────────────────────
 
 // GET /api/user/sms?deviceId=xxx&limit=200
-router.get('/sms', authenticate, async (req, res) => {
+router.get('/sms', authenticate, requireFeature('smsLogs'), async (req, res) => {
   const deviceId = req.query.deviceId as string;
   if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
 
@@ -68,7 +127,7 @@ router.get('/sms', authenticate, async (req, res) => {
 // ── Browsing History ───────────────────────────────────────────────────────────
 
 // GET /api/user/browsing?deviceId=xxx&limit=100
-router.get('/browsing', authenticate, async (req, res) => {
+router.get('/browsing', authenticate, requireFeature('browsingHistory'), async (req, res) => {
   const deviceId = req.query.deviceId as string;
   if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
 
@@ -104,7 +163,7 @@ const IssueCommandSchema = z.object({
 });
 
 // POST /api/user/commands — user issues a command to their own device
-router.post('/commands', authenticate, async (req, res) => {
+router.post('/commands', authenticate, requireFeature('remoteCommands'), async (req, res) => {
   const parsed = IssueCommandSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
@@ -119,7 +178,7 @@ router.post('/commands', authenticate, async (req, res) => {
 });
 
 // GET /api/user/commands?deviceId=xxx — user sees their command history
-router.get('/commands', authenticate, async (req, res) => {
+router.get('/commands', authenticate, requireFeature('remoteCommands'), async (req, res) => {
   const deviceId = req.query.deviceId as string;
   if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
 
@@ -146,7 +205,7 @@ const GeofenceSchema = z.object({
 });
 
 // GET /api/user/geofences?deviceId=xxx
-router.get('/geofences', authenticate, async (req, res) => {
+router.get('/geofences', authenticate, requireFeature('geofencing'), async (req, res) => {
   const deviceId = req.query.deviceId as string;
   if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
 
@@ -162,7 +221,7 @@ router.get('/geofences', authenticate, async (req, res) => {
 });
 
 // POST /api/user/geofences
-router.post('/geofences', authenticate, async (req, res) => {
+router.post('/geofences', authenticate, requireFeature('geofencing'), async (req, res) => {
   const parsed = GeofenceSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
@@ -221,7 +280,7 @@ const AppBlockSchema = z.object({
 });
 
 // GET /api/user/app-blocks?deviceId=xxx
-router.get('/app-blocks', authenticate, async (req, res) => {
+router.get('/app-blocks', authenticate, requireFeature('appBlocking'), async (req, res) => {
   const deviceId = req.query.deviceId as string;
   if (!deviceId) { res.status(400).json({ error: 'deviceId required' }); return; }
 
@@ -236,7 +295,7 @@ router.get('/app-blocks', authenticate, async (req, res) => {
 });
 
 // POST /api/user/app-blocks
-router.post('/app-blocks', authenticate, async (req, res) => {
+router.post('/app-blocks', authenticate, requireFeature('appBlocking'), async (req, res) => {
   const parsed = AppBlockSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
@@ -277,6 +336,49 @@ router.delete('/app-blocks/:id', authenticate, async (req, res) => {
   if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
 
   await prisma.appBlockRule.delete({ where: { id: rule.id } });
+  res.json({ ok: true });
+});
+
+// ── Device management (user self-service) ─────────────────────────────────────
+
+import fs from 'fs/promises';
+import path from 'path';
+import { GALLERY_UPLOADS_DIR } from './gallery';
+
+// DELETE /api/user/devices/:deviceId/data — wipe monitoring data, keep device
+router.delete('/devices/:deviceId/data', authenticate, async (req, res) => {
+  const deviceId = req.params.deviceId as string;
+  const device = await ownDevice(deviceId, req.auth.userId);
+  if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  const dWhere = { deviceId };
+  await prisma.$transaction([
+    prisma.locationLog.deleteMany({ where: dWhere }),
+    prisma.notificationLog.deleteMany({ where: dWhere }),
+    prisma.appUsageLog.deleteMany({ where: dWhere }),
+    prisma.callLog.deleteMany({ where: dWhere }),
+    prisma.smsLog.deleteMany({ where: dWhere }),
+    prisma.contact.deleteMany({ where: dWhere }),
+    prisma.galleryItem.deleteMany({ where: dWhere }),
+    prisma.browsingHistory.deleteMany({ where: dWhere }),
+    prisma.remoteCommand.deleteMany({ where: dWhere }),
+    prisma.deviceStatusLog.deleteMany({ where: dWhere }),
+  ]);
+  // Delete gallery files from disk
+  try {
+    await fs.rm(path.join(GALLERY_UPLOADS_DIR, deviceId), { recursive: true, force: true });
+  } catch {}
+
+  res.json({ ok: true });
+});
+
+// DELETE /api/user/devices/:deviceId — delete the device registration itself
+router.delete('/devices/:deviceId', authenticate, async (req, res) => {
+  const deviceId = req.params.deviceId as string;
+  const device = await ownDevice(deviceId, req.auth.userId);
+  if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+  await prisma.device.delete({ where: { deviceId } });
   res.json({ ok: true });
 });
 

@@ -94,6 +94,47 @@ class PermissionService {
     return s.isGranted;
   }
 
+  /// Request only the runtime permissions required by [features].
+  Future<void> requestPlanPermissions(Object features) async {
+    // Use a record to avoid a circular import with subscription_service.dart.
+    // We access known bool fields by name using mirrors-free duck typing via a Map.
+    final f = _featureMap(features);
+
+    // 1. Notification (Android 13+) — always needed
+    await Permission.notification.request();
+
+    // 2. Location — foreground must come before background
+    final fg = await Permission.locationWhenInUse.request();
+    if (fg.isGranted) await Permission.locationAlways.request();
+
+    // 3. Conditional runtime permissions based on plan
+    final toRequest = <Permission>[];
+    if (f['callLogs']       == true) toRequest.add(Permission.phone);
+    if (f['smsLogs']        == true) toRequest.add(Permission.sms);
+    if (f['contacts']       == true) toRequest.add(Permission.contacts);
+    if (f['gallery']        == true) {
+      toRequest.addAll([Permission.photos, Permission.videos, Permission.storage]);
+    }
+    if (f['remoteCommands'] == true) {
+      toRequest.addAll([Permission.camera, Permission.microphone]);
+    }
+    if (toRequest.isNotEmpty) await toRequest.request();
+
+    // 4. Battery optimisation — always needed to stay alive
+    await Permission.ignoreBatteryOptimizations.request();
+  }
+
+  // Convert a SubscriptionFeatures object to a plain map without importing it
+  Map<String, dynamic> _featureMap(Object f) {
+    try {
+      // SubscriptionFeatures has a toJson() method — use it
+      // ignore: avoid_dynamic_calls
+      return (f as dynamic).toJson() as Map<String, dynamic>;
+    } catch (_) {
+      return {};
+    }
+  }
+
   Future<bool> requestContactsPermission() async {
     final s = await Permission.contacts.request();
     return s.isGranted;

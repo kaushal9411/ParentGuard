@@ -38,14 +38,15 @@ router.get('/stats', authenticate, requireAdmin, async (_req, res) => {
   const today = new Date(); today.setHours(0, 0, 0, 0);
 
   const [
-    totalUsers, totalDevices, onlineDevices,
+    totalUsers, totalChildDevices, onlineDevices,
     totalLocations, totalNotifications, totalUsageLogs,
-    totalCallLogs, totalSmsLogs, totalContacts, totalGalleryItems,
-    newUsersToday, newDevicesToday, logsToday,
+    totalCallLogs, totalSmsLogs, totalContacts, totalGalleryItems, totalBrowsing,
+    newUsersToday, newDevicesToday,
+    locToday, notifToday, callToday, smsToday, usageToday,
   ] = await Promise.all([
     prisma.user.count({ where: { role: { not: 'admin' } } }),
-    prisma.device.count(),
-    prisma.device.count({ where: { isOnline: true } }),
+    prisma.device.count({ where: { role: 'child' } }),        // child devices only
+    prisma.device.count({ where: { isOnline: true, role: 'child' } }),
     prisma.locationLog.count(),
     prisma.notificationLog.count(),
     prisma.appUsageLog.count(),
@@ -53,16 +54,26 @@ router.get('/stats', authenticate, requireAdmin, async (_req, res) => {
     prisma.smsLog.count(),
     prisma.contact.count(),
     prisma.galleryItem.count(),
+    prisma.browsingHistory.count(),
     prisma.user.count({ where: { createdAt: { gte: today }, role: { not: 'admin' } } }),
-    prisma.device.count({ where: { registeredAt: { gte: today } } }),
+    prisma.device.count({ where: { registeredAt: { gte: today }, role: 'child' } }),
     prisma.locationLog.count({ where: { syncedAt: { gte: today } } }),
+    prisma.notificationLog.count({ where: { syncedAt: { gte: today } } }),
+    prisma.callLog.count({ where: { syncedAt: { gte: today } } }),
+    prisma.smsLog.count({ where: { syncedAt: { gte: today } } }),
+    prisma.appUsageLog.count({ where: { capturedAt: { gte: today } } }),
   ]);
 
+  const syncedToday = locToday + notifToday + callToday + smsToday + usageToday;
+
   res.json({
-    totalUsers, totalDevices, onlineDevices,
+    totalUsers,
+    totalDevices: totalChildDevices,
+    onlineDevices,
     totalLocations, totalNotifications, totalUsageLogs,
-    totalCallLogs, totalSmsLogs, totalContacts, totalGalleryItems,
-    newUsersToday, newDevicesToday, logsToday,
+    totalCallLogs, totalSmsLogs, totalContacts, totalGalleryItems, totalBrowsing,
+    newUsersToday, newDevicesToday,
+    syncedToday,
   });
 });
 
@@ -311,6 +322,81 @@ async function deleteGalleryFiles(deviceIds: string[]): Promise<void> {
     ),
   );
 }
+
+// ── DELETE /api/admin/users/:userId/data — wipe monitoring data, keep account ──
+router.delete('/users/:userId/data', authenticate, requireAdmin, async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.params.userId as string } });
+  if (!user || user.role === 'admin') { res.status(404).json({ error: 'User not found' }); return; }
+
+  const deviceIds = (
+    await prisma.device.findMany({ where: { userId: user.id }, select: { deviceId: true } })
+  ).map((d) => d.deviceId);
+
+  if (deviceIds.length === 0) { res.json({ ok: true, deleted: {} }); return; }
+
+  const dWhere = { deviceId: { in: deviceIds } };
+
+  // Delete all monitoring data but keep the user + devices
+  const [locs, notifs, usage, calls, sms, contacts, gallery, browsing, cmds, status] =
+    await prisma.$transaction([
+      prisma.locationLog.deleteMany({ where: dWhere }),
+      prisma.notificationLog.deleteMany({ where: dWhere }),
+      prisma.appUsageLog.deleteMany({ where: dWhere }),
+      prisma.callLog.deleteMany({ where: dWhere }),
+      prisma.smsLog.deleteMany({ where: dWhere }),
+      prisma.contact.deleteMany({ where: dWhere }),
+      prisma.galleryItem.deleteMany({ where: dWhere }),
+      prisma.browsingHistory.deleteMany({ where: dWhere }),
+      prisma.remoteCommand.deleteMany({ where: dWhere }),
+      prisma.deviceStatusLog.deleteMany({ where: dWhere }),
+    ]);
+
+  await deleteGalleryFiles(deviceIds);
+
+  res.json({
+    ok: true,
+    deleted: {
+      locations: locs.count, notifications: notifs.count, appUsage: usage.count,
+      callLogs: calls.count, smsLogs: sms.count, contacts: contacts.count,
+      galleryItems: gallery.count, browsingHistory: browsing.count,
+      commands: cmds.count, statusLogs: status.count,
+    },
+  });
+});
+
+// ── DELETE /api/admin/devices/:deviceId/data — wipe device monitoring data ────
+router.delete('/devices/:deviceId/data', authenticate, requireAdmin, async (req, res) => {
+  const deviceId = String(req.params.deviceId);
+  const device = await prisma.device.findUnique({ where: { deviceId } });
+  if (!device) { res.status(404).json({ error: 'Device not found' }); return; }
+
+  const dWhere = { deviceId };
+  const [locs, notifs, usage, calls, sms, contacts, gallery, browsing, cmds, status] =
+    await prisma.$transaction([
+      prisma.locationLog.deleteMany({ where: dWhere }),
+      prisma.notificationLog.deleteMany({ where: dWhere }),
+      prisma.appUsageLog.deleteMany({ where: dWhere }),
+      prisma.callLog.deleteMany({ where: dWhere }),
+      prisma.smsLog.deleteMany({ where: dWhere }),
+      prisma.contact.deleteMany({ where: dWhere }),
+      prisma.galleryItem.deleteMany({ where: dWhere }),
+      prisma.browsingHistory.deleteMany({ where: dWhere }),
+      prisma.remoteCommand.deleteMany({ where: dWhere }),
+      prisma.deviceStatusLog.deleteMany({ where: dWhere }),
+    ]);
+
+  await deleteGalleryFiles([deviceId]);
+
+  res.json({
+    ok: true,
+    deleted: {
+      locations: locs.count, notifications: notifs.count, appUsage: usage.count,
+      callLogs: calls.count, smsLogs: sms.count, contacts: contacts.count,
+      galleryItems: gallery.count, browsingHistory: browsing.count,
+      commands: cmds.count, statusLogs: status.count,
+    },
+  });
+});
 
 // ── DELETE /api/admin/users/:userId ──────────────────────────────────────────
 router.delete('/users/:userId', authenticate, requireAdmin, async (req, res) => {

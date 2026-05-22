@@ -3,10 +3,12 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   CreditCard, Plus, Edit2, Trash2, Users, Check, X,
   BadgeCheck, Clock, AlertCircle, ChevronDown, ChevronUp,
-  Send, Link, IndianRupee, CheckCircle,
+  Send, Link, IndianRupee, CheckCircle, ExternalLink,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
+import { confirmDialog } from '@/lib/confirm';
+import { toast } from 'sonner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,6 +32,19 @@ interface UserSub {
     id: string; status: string; startedAt: string; expiresAt: string | null;
     plan: { id: string; name: string; price: number };
   } | null;
+}
+
+interface Payment {
+  id: string;
+  amount: number;
+  status: string;
+  type: string;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  razorpayPaymentLinkId: string | null;
+  createdAt: string;
+  user: { id: string; name: string; email: string };
+  plan: { name: string; price: number };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -348,47 +363,69 @@ function SendPaymentLinkModal({ user, plans, onClose }: {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function SubscriptionsPage() {
-  const [tab, setTab]               = useState<'plans' | 'users' | 'requests'>('plans');
+  const [tab, setTab]               = useState<'plans' | 'users' | 'requests' | 'payments'>('plans');
   const [plans, setPlans]           = useState<Plan[]>([]);
   const [users, setUsers]           = useState<UserSub[]>([]);
+  const [payments, setPayments]     = useState<Payment[]>([]);
   const [loading, setLoading]       = useState(true);
   const [editingPlan, setEditingPlan]     = useState<Plan | null | 'new'>(null);
   const [assignUser, setAssignUser]       = useState<UserSub | null>(null);
   const [payLinkUser, setPayLinkUser]     = useState<UserSub | null>(null);
   const [requests, setRequests]           = useState<Array<{ id: string; status: string; createdAt: string; user: { id: string; name: string; email: string }; plan: { id: string; name: string; price: number } }>>([]);
   const [search, setSearch]         = useState('');
+  const [paySearch, setPaySearch]   = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [p, u, r] = await Promise.all([
+      const [p, u, r, ph] = await Promise.all([
         adminApi.getPlans(),
         adminApi.getSubscriptionUsers(),
         adminApi.getUpgradeRequests().catch(() => ({ data: [] })),
+        adminApi.getPaymentHistory().catch(() => ({ data: [] })),
       ]);
       setPlans(p.data);
       setUsers(u.data);
       setRequests(r.data);
+      setPayments(ph.data);
     } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   async function deletePlan(id: string, name: string) {
-    if (!confirm(`Delete plan "${name}"? This cannot be undone.`)) return;
+    const ok = await confirmDialog({
+      title: `Delete plan "${name}"?`,
+      text: 'This cannot be undone. Users on this plan will lose their subscription.',
+      confirmText: 'Delete Plan',
+      type: 'danger', theme: 'dark',
+    });
+    if (!ok) return;
     try {
       await adminApi.deletePlan(id);
       setPlans((ps) => ps.filter((p) => p.id !== id));
+      toast.success(`Plan "${name}" deleted`);
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { error?: string } } }).response?.data?.error;
-      alert(typeof msg === 'string' ? msg : 'Failed to delete');
+      toast.error(typeof msg === 'string' ? msg : 'Failed to delete plan');
     }
   }
 
   async function revokeSubscription(userId: string, name: string) {
-    if (!confirm(`Revoke subscription for "${name}"?`)) return;
-    await adminApi.revokeSubscription(userId);
-    await load();
+    const ok = await confirmDialog({
+      title: `Revoke subscription for "${name}"?`,
+      text: 'The user will lose access to premium features.',
+      confirmText: 'Revoke',
+      type: 'warning', theme: 'dark',
+    });
+    if (!ok) return;
+    try {
+      await adminApi.revokeSubscription(userId);
+      await load();
+      toast.success(`Subscription revoked for "${name}"`);
+    } catch {
+      toast.error('Failed to revoke subscription');
+    }
   }
 
   const filteredUsers = users.filter((u) => {
@@ -429,11 +466,12 @@ export default function SubscriptionsPage() {
         {/* Tabs */}
         <div className="flex gap-1">
           {([
-            ['plans', `Plans (${plans.length})`],
-            ['users', `Users (${users.length})`],
+            ['plans',    `Plans (${plans.length})`],
+            ['users',    `Users (${users.length})`],
             ['requests', `Upgrade Requests ${requests.filter(r => r.status === 'pending').length > 0 ? `(${requests.filter(r => r.status === 'pending').length} pending)` : `(${requests.length})`}`],
+            ['payments', `Payment History (${payments.length})`],
           ] as const).map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t as 'plans' | 'users')}
+            <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${tab === t ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}>
               {label}
             </button>
@@ -636,6 +674,133 @@ export default function SubscriptionsPage() {
                 </tbody>
               </table>
             )}
+          </div>
+
+        ) : tab === 'payments' ? (
+
+          /* ── Payment History ── */
+          <div className="space-y-4">
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: 'Total Payments',  value: payments.length,                                         color: 'text-white' },
+                { label: 'Successful',      value: payments.filter(p => p.status === 'paid').length,        color: 'text-green-400' },
+                { label: 'Pending',         value: payments.filter(p => p.status === 'created').length,     color: 'text-yellow-400' },
+                { label: 'Total Revenue',   value: `₹${payments.filter(p => p.status === 'paid').reduce((s, p) => s + p.amount, 0).toLocaleString('en-IN')}`, color: 'text-indigo-400' },
+              ].map((s) => (
+                <div key={s.label} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                  <p className={`text-2xl font-extrabold ${s.color}`}>{s.value}</p>
+                  <p className="text-gray-500 text-xs mt-0.5">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Search */}
+            <div className="relative max-w-xs">
+              <input value={paySearch} onChange={(e) => setPaySearch(e.target.value)}
+                placeholder="Search user or plan…"
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-3 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500" />
+            </div>
+
+            {/* Table */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+              {payments.length === 0 ? (
+                <div className="text-center text-gray-500 py-12">No payment records yet</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-800 text-gray-400 text-xs">
+                        <th className="text-left px-5 py-3">User</th>
+                        <th className="text-left px-5 py-3">Plan</th>
+                        <th className="text-left px-5 py-3">Amount</th>
+                        <th className="text-left px-5 py-3">Status</th>
+                        <th className="text-left px-5 py-3">Type</th>
+                        <th className="text-left px-5 py-3">Payment ID</th>
+                        <th className="text-left px-5 py-3">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-800/50">
+                      {payments
+                        .filter((p) => {
+                          if (!paySearch) return true;
+                          const q = paySearch.toLowerCase();
+                          return (
+                            p.user.name.toLowerCase().includes(q) ||
+                            p.user.email.toLowerCase().includes(q) ||
+                            p.plan.name.toLowerCase().includes(q)
+                          );
+                        })
+                        .map((p) => (
+                          <tr key={p.id} className="hover:bg-gray-800/30 transition-colors">
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 bg-indigo-700/40 rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                                  {p.user.name.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                  <p className="text-white font-semibold text-sm">{p.user.name}</p>
+                                  <p className="text-gray-500 text-xs">{p.user.email}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3">
+                              <p className="text-white font-semibold">{p.plan.name}</p>
+                              <p className="text-gray-500 text-xs">₹{p.plan.price}/mo</p>
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className="text-white font-bold flex items-center gap-1">
+                                <IndianRupee size={12} className="text-gray-400" />{p.amount.toLocaleString('en-IN')}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3">
+                              {p.status === 'paid'    && <span className="text-green-400 bg-green-900/30 text-xs px-2 py-0.5 rounded-full font-semibold">Paid</span>}
+                              {p.status === 'created' && <span className="text-yellow-400 bg-yellow-900/30 text-xs px-2 py-0.5 rounded-full font-semibold">Pending</span>}
+                              {p.status === 'failed'  && <span className="text-red-400 bg-red-900/30 text-xs px-2 py-0.5 rounded-full font-semibold">Failed</span>}
+                              {p.status === 'refunded'&& <span className="text-orange-400 bg-orange-900/30 text-xs px-2 py-0.5 rounded-full font-semibold">Refunded</span>}
+                              {!['paid','created','failed','refunded'].includes(p.status) && (
+                                <span className="text-gray-400 bg-gray-800 text-xs px-2 py-0.5 rounded-full font-semibold capitalize">{p.status}</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3">
+                              <span className={`text-xs px-2 py-0.5 rounded-full font-semibold capitalize ${
+                                p.type === 'checkout'     ? 'text-blue-400 bg-blue-900/30' :
+                                p.type === 'payment_link' ? 'text-purple-400 bg-purple-900/30' :
+                                'text-gray-400 bg-gray-800'
+                              }`}>
+                                {p.type === 'payment_link' ? 'Pay Link' : p.type}
+                              </span>
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="space-y-0.5">
+                                {p.razorpayPaymentId && (
+                                  <p className="text-gray-300 text-xs font-mono flex items-center gap-1">
+                                    <ExternalLink size={9} className="text-gray-500" />
+                                    {p.razorpayPaymentId}
+                                  </p>
+                                )}
+                                {!p.razorpayPaymentId && p.razorpayOrderId && (
+                                  <p className="text-gray-500 text-xs font-mono">{p.razorpayOrderId}</p>
+                                )}
+                                {!p.razorpayPaymentId && !p.razorpayOrderId && p.razorpayPaymentLinkId && (
+                                  <p className="text-gray-500 text-xs font-mono">{p.razorpayPaymentLinkId}</p>
+                                )}
+                                {!p.razorpayPaymentId && !p.razorpayOrderId && !p.razorpayPaymentLinkId && (
+                                  <span className="text-gray-600 text-xs">—</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">
+                              {new Date(p.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              <p className="text-gray-600 text-[10px]">{new Date(p.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</p>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
 
         ) : null}

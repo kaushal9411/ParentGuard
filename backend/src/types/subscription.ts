@@ -3,6 +3,7 @@ export interface SubscriptionFeatures {
   location:        boolean;
   notifications:   boolean;
   callLogs:        boolean;
+  smsLogs:         boolean;
   contacts:        boolean;
   appUsage:        boolean;
   gallery:         boolean;
@@ -18,6 +19,7 @@ export const FREE_FEATURES: SubscriptionFeatures = {
   location:        true,
   notifications:   true,
   callLogs:        false,
+  smsLogs:         false,
   contacts:        false,
   appUsage:        false,
   gallery:         false,

@@ -11,6 +11,7 @@ class SubscriptionFeatures {
   final bool    location;
   final bool    notifications;
   final bool    callLogs;
+  final bool    smsLogs;
   final bool    contacts;
   final bool    appUsage;
   final bool    gallery;
@@ -25,6 +26,7 @@ class SubscriptionFeatures {
     this.location        = true,
     this.notifications   = true,
     this.callLogs        = false,
+    this.smsLogs         = false,
     this.contacts        = false,
     this.appUsage        = false,
     this.gallery         = false,
@@ -43,6 +45,7 @@ class SubscriptionFeatures {
         location:        (j['location']        as bool?) ?? true,
         notifications:   (j['notifications']   as bool?) ?? true,
         callLogs:        (j['callLogs']        as bool?) ?? false,
+        smsLogs:         (j['smsLogs']         as bool?) ?? false,
         contacts:        (j['contacts']        as bool?) ?? false,
         appUsage:        (j['appUsage']        as bool?) ?? false,
         gallery:         (j['gallery']         as bool?) ?? false,
@@ -55,7 +58,7 @@ class SubscriptionFeatures {
 
   Map<String, dynamic> toJson() => {
     'maxDevices': maxDevices, 'location': location, 'notifications': notifications,
-    'callLogs': callLogs, 'contacts': contacts, 'appUsage': appUsage,
+    'callLogs': callLogs, 'smsLogs': smsLogs, 'contacts': contacts, 'appUsage': appUsage,
     'gallery': gallery, 'browsingHistory': browsingHistory,
     'geofencing': geofencing, 'appBlocking': appBlocking,
     'remoteCommands': remoteCommands, 'historyDays': historyDays,

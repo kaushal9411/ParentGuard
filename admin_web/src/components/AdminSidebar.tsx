@@ -2,24 +2,31 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { ShieldCheck, LayoutDashboard, Users, Smartphone, CreditCard, Download, LogOut, ChevronRight } from 'lucide-react';
+import { ShieldCheck, LayoutDashboard, Users, Smartphone, CreditCard, Download, LogOut, ChevronRight, MessageSquare } from 'lucide-react';
 import { clearAdminAuth, getAdminUser } from '@/lib/adminAuth';
+import { adminApi } from '@/lib/adminApi';
 
 const NAV = [
-  { href: '/admin/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/admin/devices',       icon: Smartphone,  label: 'Devices' },
-  { href: '/admin/subscriptions', icon: CreditCard,  label: 'Subscriptions' },
-  { href: '/admin/app-release',   icon: Download,    label: 'App Release' },
-  { href: '/admin/users',         icon: Users,       label: 'All Users' },
+  { href: '/admin/dashboard',    icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/admin/devices', icon: Smartphone, label: 'Devices' },
+  { href: '/admin/users',        icon: Users,           label: 'All Users' },
+  { href: '/admin/subscriptions',icon: CreditCard,      label: 'Subscriptions' },
+  { href: '/admin/inquiries',    icon: MessageSquare,   label: 'Inquiries' },
+  { href: '/admin/app-release',  icon: Download,        label: 'App Release' },
 ];
 
 export default function AdminSidebar() {
   const pathname = usePathname();
   const router   = useRouter();
-  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [user, setUser]           = useState<{ name: string; email: string } | null>(null);
+  const [newInquiries, setNewInq] = useState(0);
 
   useEffect(() => {
     setUser(getAdminUser<{ name: string; email: string }>());
+    // Load unread inquiry count
+    adminApi.getInquiries('new')
+      .then((r) => setNewInq(Array.isArray(r.data) ? r.data.length : 0))
+      .catch(() => {});
   }, []);
 
   function logout() {
@@ -65,6 +72,11 @@ export default function AdminSidebar() {
                   : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
               <Icon size={18} className={active ? 'text-indigo-400' : 'text-gray-500 group-hover:text-gray-300'} />
               <span className="flex-1">{label}</span>
+              {label === 'Inquiries' && newInquiries > 0 && (
+                <span className="bg-yellow-500 text-black text-[10px] font-extrabold px-1.5 py-0.5 rounded-full leading-none">
+                  {newInquiries}
+                </span>
+              )}
               {active && <ChevronRight size={14} className="text-indigo-500" />}
             </Link>
           );

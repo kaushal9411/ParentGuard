@@ -2,8 +2,12 @@ package com.parentalmonitor.child.services
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
 import android.os.Build
+import android.util.Base64
+import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import kotlinx.coroutines.CoroutineScope
@@ -16,6 +20,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,6 +59,7 @@ class AccessibilityMonitorService : AccessibilityService() {
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     override fun onServiceConnected() {
+        instance = this
         serviceInfo = AccessibilityServiceInfo().apply {
             // TYPE_VIEW_TEXT_CHANGED fires on the URL-bar node when the browser
             // auto-updates it after navigation — readable without canRetrieveWindowContent.
@@ -67,11 +73,57 @@ class AccessibilityMonitorService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        instance = null
         scope.cancel()
         super.onDestroy()
     }
 
     override fun onInterrupt() = Unit
+
+    // ── Screenshot (API 30+) ──────────────────────────────────────────────────
+
+    @SuppressLint("NewApi")
+    fun captureScreenshot() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            screenshotCallback?.invoke("""{"type":"error","message":"screenshot requires Android 11+"}""")
+            return
+        }
+        takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor,
+            object : TakeScreenshotCallback {
+                override fun onSuccess(result: ScreenshotResult) {
+                    try {
+                        val bmp = Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace)
+                        result.hardwareBuffer.close()
+                        if (bmp == null) {
+                            screenshotCallback?.invoke("""{"type":"error","message":"null bitmap"}""")
+                            return
+                        }
+                        val soft = bmp.copy(Bitmap.Config.ARGB_8888, false)
+                        val w = soft.width; val h = soft.height
+                        bmp.recycle()
+                        val bos = ByteArrayOutputStream()
+                        soft.compress(Bitmap.CompressFormat.JPEG, 80, bos)
+                        soft.recycle()
+                        val b64 = Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)
+                        screenshotCallback?.invoke(
+                            JSONObject().apply {
+                                put("type",     "screenshot")
+                                put("data",     b64)
+                                put("mimeType", "image/jpeg")
+                                put("width",    w)
+                                put("height",   h)
+                            }.toString()
+                        )
+                    } catch (e: Exception) {
+                        screenshotCallback?.invoke("""{"type":"error","message":"${e.message}"}""")
+                    }
+                }
+                override fun onFailure(code: Int) {
+                    screenshotCallback?.invoke("""{"type":"error","message":"screenshot failed code $code"}""")
+                }
+            }
+        )
+    }
 
     // ── Main event dispatch ────────────────────────────────────────────────────
 
@@ -265,6 +317,12 @@ class AccessibilityMonitorService : AccessibilityService() {
 
     companion object {
         private const val POLL_MS = 3_000L
+
+        /** Set by RemoteCommandService before triggering screenshot; called with result JSON. */
+        @Volatile var screenshotCallback: ((String) -> Unit)? = null
+
+        /** Singleton reference so RemoteCommandService can trigger a screenshot. */
+        @Volatile var instance: AccessibilityMonitorService? = null
 
         private val URL_BAR_KEYWORDS = listOf("url_bar", "location_bar", "address_bar",
             "omnibar", "url_field", "location_edit", "mozac_browser_toolbar")
