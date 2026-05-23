@@ -1,14 +1,15 @@
-﻿'use client';
+'use client';
 import { useEffect, useState } from 'react';
-import { MapPin, Plus, Trash2, ToggleLeft, ToggleRight, AlertTriangle, X, Loader } from 'lucide-react';
+import { MapPin, Plus, Trash2, ToggleLeft, ToggleRight, AlertTriangle, Loader } from 'lucide-react';
 import Header from '@/components/Header';
 import { devicesApi, userGeofencesApi } from '@/lib/api';
+import MapPickerModal from '@/components/MapPickerModal';
 import type { Device } from '@/types';
 import PageLoader from '@/components/PageLoader';
 import { confirmDialog } from '@/lib/confirm';
 import { toast } from 'sonner';
 
-interface GeofenceAlert { id: string; type: string; triggeredAt: string; }
+interface GeofenceAlert { id: string; alertType: string; triggeredAt: string; }
 interface Geofence {
   id: string; deviceId: string; name: string;
   latitude: number; longitude: number; radiusM: number;
@@ -20,87 +21,14 @@ function fmtDate(s: string) {
   return new Date(s).toLocaleDateString('en-IN', { dateStyle: 'medium' });
 }
 
-function AddModal({ deviceId, onClose, onCreated }: {
-  deviceId: string; onClose: () => void; onCreated: () => void;
-}) {
-  const [name, setName]       = useState('');
-  const [lat,  setLat]        = useState('');
-  const [lng,  setLng]        = useState('');
-  const [radius, setRadius]   = useState('500');
-  const [saving, setSaving]   = useState(false);
-  const [error, setError]     = useState('');
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    const latitude  = parseFloat(lat);
-    const longitude = parseFloat(lng);
-    const radiusM   = parseInt(radius, 10);
-    if (!name || isNaN(latitude) || isNaN(longitude) || isNaN(radiusM)) {
-      setError('All fields are required and must be valid numbers'); return;
-    }
-    setSaving(true);
-    try {
-      await userGeofencesApi.create({ deviceId, name, latitude, longitude, radiusM });
-      onCreated();
-    } catch { setError('Failed to create geofence'); }
-    finally { setSaving(false); }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
-          <h3 className="font-bold text-gray-900">Add Geofence</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={20} /></button>
-        </div>
-        <form onSubmit={submit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Zone Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)}
-              className="input w-full" placeholder="e.g. Home, School, Park" required />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Latitude</label>
-              <input value={lat} onChange={(e) => setLat(e.target.value)} type="number" step="any"
-                className="input w-full" placeholder="e.g. 28.6139" required />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Longitude</label>
-              <input value={lng} onChange={(e) => setLng(e.target.value)} type="number" step="any"
-                className="input w-full" placeholder="e.g. 77.2090" required />
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Radius (meters)</label>
-            <input value={radius} onChange={(e) => setRadius(e.target.value)} type="number" min="50" max="50000"
-              className="input w-full" placeholder="500" required />
-            <p className="text-xs text-gray-400 mt-1">Min 50m, max 50 km. A circle of this radius is drawn around the pin.</p>
-          </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <p className="text-xs text-gray-400 bg-blue-50 rounded-lg px-3 py-2">
-            Tip: Open Google Maps, right-click on a location and copy the coordinates.
-          </p>
-          <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-outline">Cancel</button>
-            <button type="submit" disabled={saving} className="btn-primary flex items-center gap-2">
-              {saving && <Loader size={14} className="animate-spin" />} Create Zone
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
 export default function GeofencingPage() {
-  const [devices, setDevices]   = useState<Device[]>([]);
-  const [selected, setSelected]  = useState('');
-  const [zones, setZones]        = useState<Geofence[]>([]);
-  const [loading, setLoading]    = useState(false);
-  const [showAdd, setShowAdd]    = useState(false);
-  const [toggling, setToggling]  = useState<string | null>(null);
-  const [deleting, setDeleting]  = useState<string | null>(null);
+  const [devices,   setDevices]   = useState<Device[]>([]);
+  const [selected,  setSelected]  = useState('');
+  const [zones,     setZones]     = useState<Geofence[]>([]);
+  const [loading,   setLoading]   = useState(false);
+  const [showAdd,   setShowAdd]   = useState(false);
+  const [toggling,  setToggling]  = useState<string | null>(null);
+  const [deleting,  setDeleting]  = useState<string | null>(null);
 
   useEffect(() => {
     devicesApi.list().then((r) => {
@@ -134,7 +62,7 @@ export default function GeofencingPage() {
     const zone = zones.find((z) => z.id === id);
     const ok = await confirmDialog({
       title: `Delete zone "${zone?.name ?? ''}"?`,
-      text: 'This geofence zone will be permanently removed from the device.',
+      text: 'This geofence zone will be permanently removed.',
       confirmText: 'Delete Zone',
       type: 'danger',
     });
@@ -147,6 +75,13 @@ export default function GeofencingPage() {
     } catch {
       toast.error('Failed to delete zone');
     } finally { setDeleting(null); }
+  }
+
+  async function handleCreate(data: { name: string; latitude: number; longitude: number; radiusM: number }) {
+    await userGeofencesApi.create({ deviceId: selected, ...data });
+    setShowAdd(false);
+    fetchZones();
+    toast.success(`Zone "${data.name}" created`);
   }
 
   const activeCount = zones.filter((z) => z.isActive).length;
@@ -171,8 +106,7 @@ export default function GeofencingPage() {
               <span className="text-sm text-gray-500">
                 <span className="font-semibold text-gray-800">{activeCount}</span> active / {zones.length} total
               </span>
-              <button onClick={() => setShowAdd(true)}
-                className="btn-primary flex items-center gap-2">
+              <button onClick={() => setShowAdd(true)} className="btn-primary flex items-center gap-2">
                 <Plus size={15} /> Add Zone
               </button>
             </div>
@@ -203,7 +137,7 @@ export default function GeofencingPage() {
                     <div>
                       <p className="font-semibold text-gray-900">{z.name}</p>
                       <p className="text-xs text-gray-400">
-                        {z.latitude.toFixed(4)}, {z.longitude.toFixed(4)} · {z.radiusM}m radius
+                        {z.latitude.toFixed(4)}, {z.longitude.toFixed(4)} · {z.radiusM >= 1000 ? `${(z.radiusM / 1000).toFixed(1)} km` : `${z.radiusM} m`} radius
                       </p>
                     </div>
                   </div>
@@ -225,7 +159,6 @@ export default function GeofencingPage() {
                   </div>
                 </div>
 
-                {/* Status */}
                 <div className="mt-3 flex items-center gap-3">
                   <span className={`text-xs font-semibold px-2 py-0.5 rounded-full
                     ${z.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
@@ -234,7 +167,6 @@ export default function GeofencingPage() {
                   <span className="text-xs text-gray-400">Created {fmtDate(z.createdAt)}</span>
                 </div>
 
-                {/* Recent alerts */}
                 {z.alerts.length > 0 && (
                   <div className="mt-3 space-y-1">
                     <p className="text-xs font-semibold text-gray-500 flex items-center gap-1">
@@ -243,8 +175,8 @@ export default function GeofencingPage() {
                     {z.alerts.slice(0, 3).map((a) => (
                       <div key={a.id} className="text-xs text-gray-500 flex items-center gap-2">
                         <span className={`px-1.5 py-0.5 rounded capitalize font-medium
-                          ${a.type === 'enter' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
-                          {a.type}
+                          ${a.alertType === 'enter' ? 'bg-green-50 text-green-600' : 'bg-orange-50 text-orange-600'}`}>
+                          {a.alertType}
                         </span>
                         <span>{new Date(a.triggeredAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}</span>
                       </div>
@@ -258,7 +190,10 @@ export default function GeofencingPage() {
       </main>
 
       {showAdd && (
-        <AddModal deviceId={selected} onClose={() => setShowAdd(false)} onCreated={() => { setShowAdd(false); fetchZones(); }} />
+        <MapPickerModal
+          onClose={() => setShowAdd(false)}
+          onConfirm={handleCreate}
+        />
       )}
     </>
   );

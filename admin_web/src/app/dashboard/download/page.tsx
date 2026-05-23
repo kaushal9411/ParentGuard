@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import {
   Download, Smartphone, Shield, CheckCircle,
@@ -68,7 +68,7 @@ function ConsentModal({
                 Consent &amp; Legal Agreement
               </h2>
               <p className="text-gray-500 text-xs mt-0.5">
-                Required before downloading ParentGuard
+                Required before downloading ParentGard
               </p>
             </div>
           </div>
@@ -202,7 +202,7 @@ const STEPS = [
   {
     icon: <Package size={22} className="text-green-600" />,
     title: 'Install the App',
-    desc:  'Open the downloaded APK file and tap "Install". The app will appear as "Device Monitor".',
+    desc:  'Open the downloaded APK file and tap "Install". The app will appear as "ParentGard".',
     bg:    'bg-green-50',
   },
   {
@@ -250,7 +250,7 @@ export default function DownloadPage() {
 
     const a = document.createElement('a');
     a.href     = `${API}/api/downloads/app?token=${token}`;
-    a.download = `ParentGuard-v${info.version}.apk`;
+    a.download = `ParentGard-v${info.version}.apk`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -287,7 +287,7 @@ export default function DownloadPage() {
 
   return (
     <>
-      <Header title="Download App" subtitle="Install the ParentGuard child monitoring app" />
+      <Header title="Download App" subtitle="Install the ParentGard child monitoring app" />
 
       {/* Consent modal */}
       {showConsent && (
@@ -310,7 +310,7 @@ export default function DownloadPage() {
                 <Shield size={32} className="text-white" />
               </div>
               <div>
-                <h2 className="text-2xl font-extrabold">ParentGuard</h2>
+                <h2 className="text-2xl font-extrabold">ParentGard</h2>
                 <p className="text-indigo-200 text-sm mt-0.5">Child Monitor App for Android</p>
                 {loading ? (
                   <div className="mt-2 flex items-center gap-1.5 text-indigo-300 text-xs">

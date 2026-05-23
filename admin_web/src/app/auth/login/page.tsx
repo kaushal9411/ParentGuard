@@ -41,10 +41,9 @@ export default function LoginPage() {
       {/* Left panel */}
       <div className="hidden lg:flex lg:w-1/2 bg-sidebar flex-col justify-between p-12">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-light rounded-xl flex items-center justify-center">
-            <Shield size={22} className="text-white" />
-          </div>
-          <span className="text-white font-bold text-xl">ParentGuard</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="ParentGard" className="w-10 h-10 object-contain" />
+          <span className="text-white font-bold text-xl">ParentGard</span>
         </div>
 
         <div>
@@ -70,15 +69,16 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="text-blue-300 text-sm">© 2026 ParentGuard. All rights reserved.</p>
+        <p className="text-blue-300 text-sm">© 2026 ParentGard. All rights reserved.</p>
       </div>
 
       {/* Right panel */}
       <div className="flex-1 flex items-center justify-center p-8">
         <div className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-2 mb-8">
-            <Shield size={24} className="text-primary" />
-            <span className="font-bold text-xl text-primary">ParentGuard</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="ParentGard" className="w-8 h-8 object-contain" />
+            <span className="font-bold text-xl text-primary">ParentGard</span>
           </div>
 
           <h2 className="text-3xl font-extrabold text-gray-900 mb-1">Welcome back</h2>

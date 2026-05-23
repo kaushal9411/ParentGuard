@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Camera, Mic, FolderOpen, Shield,
-  Wifi, WifiOff, ChevronRight, Radio, Monitor, AppWindow,
+  Wifi, WifiOff, ChevronRight, Radio, Monitor, AppWindow, MapPin,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
@@ -74,6 +74,16 @@ const CARDS = [
     iconBg: 'bg-emerald-500/20',
     iconColor: 'text-emerald-400',
     types: ['list_apps'],
+  },
+  {
+    key: 'geofencing',
+    label: 'Geofencing',
+    desc: 'Set location zones and get enter/exit alerts',
+    icon: MapPin,
+    gradient: 'from-green-600 to-teal-700',
+    iconBg: 'bg-green-500/20',
+    iconColor: 'text-green-400',
+    types: [] as string[],
   },
 ] as const;
 

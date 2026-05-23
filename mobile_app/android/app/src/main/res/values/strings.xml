@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Device Monitor</string>
+    <string name="app_name">ParentGard</string>
     <string name="accessibility_service_description">
         Monitors foreground app changes for parental oversight.
         Does not read screen content.

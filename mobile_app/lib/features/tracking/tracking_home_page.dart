@@ -5,6 +5,7 @@ import '../device_status/device_status_provider.dart';
 import '../location/location_provider.dart';
 import '../usage_tracking/usage_provider.dart';
 import '../auth/welcome_page.dart';
+import '../permissions/permission_page.dart';
 import '../../platform/tracking_channel.dart';
 import '../../services/auth_service.dart';
 import '../../services/background_worker.dart';
@@ -28,16 +29,55 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage> {
   void initState() {
     super.initState();
     _checkServiceStatus();
-    _fetchSubscription();
+    _fetchSubscriptionAndCheckPerms();
     _monitorTimer = Timer.periodic(
       const Duration(minutes: 1),
       (_) => BackgroundWorker.captureAllAndSync(),
     );
   }
 
-  Future<void> _fetchSubscription() async {
+  Future<void> _fetchSubscriptionAndCheckPerms() async {
     final sub = await SubscriptionService.fetch();
-    if (mounted) setState(() => _subscription = sub);
+    if (!mounted) return;
+    setState(() => _subscription = sub);
+    await _showPermissionModalIfNeeded(sub.features);
+  }
+
+  Future<void> _showPermissionModalIfNeeded(SubscriptionFeatures features) async {
+    final svc = ref.read(permissionServiceProvider);
+
+    final checks = <Future<bool>>[
+      svc.isLocationGranted(),
+      svc.isNotificationGranted(),
+      svc.isBatteryOptimisationExempt(),
+    ];
+    if (features.callLogs)      checks.add(svc.isCallLogGranted());
+    if (features.smsLogs)       checks.add(svc.isSmsGranted());
+    if (features.contacts)      checks.add(svc.isContactsGranted());
+    if (features.gallery)       checks.add(svc.isMediaGranted());
+    if (features.remoteCommands) {
+      checks.add(svc.isCameraGranted());
+      checks.add(svc.isMicGranted());
+    }
+    if (features.appUsage)      checks.add(svc.isUsageStatsGranted());
+    if (features.notifications)  checks.add(svc.isNotificationAccessGranted());
+    if (features.browsingHistory || features.appBlocking) {
+      checks.add(svc.isAccessibilityGranted());
+    }
+
+    final results = await Future.wait(checks);
+    if (!mounted || results.every((v) => v)) return;
+
+    // Some permissions missing — push a dedicated full-screen plan-based permission page
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => PermissionPage(
+          features: features,
+          onComplete: () => Navigator.pop(ctx),
+        ),
+      ),
+    );
   }
 
   @override

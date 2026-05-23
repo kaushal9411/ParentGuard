@@ -9,9 +9,12 @@ class PermissionPage extends ConsumerStatefulWidget {
     super.key,
     required this.onComplete,
     this.features = SubscriptionFeatures.free,
+    this.continueLabel,
   });
   final VoidCallback           onComplete;
   final SubscriptionFeatures   features;
+  /// Override the Continue button label. If null, auto text is used.
+  final String?                continueLabel;
 
   @override
   ConsumerState<PermissionPage> createState() => _PermissionPageState();
@@ -202,8 +205,26 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                             granted: _battery,
                             isSpecial: true,
                             onGrant: () async {
+                              // Request via permission_handler first — it properly
+                              // awaits the dialog result via onActivityResult
+                              final status = await Permission.ignoreBatteryOptimizations.request();
+                              if (status.isGranted) {
+                                _refresh();
+                                return;
+                              }
+                              // Fallback: open native battery settings screen
                               await ref.read(permissionServiceProvider)
                                   .openBatteryOptimizationSettings();
+                              // Battery dialog is a popup overlay — lifecycle
+                              // resumed event may not fire on all OEMs, so poll
+                              // every second for up to 15 s after the dialog opens
+                              for (var i = 0; i < 15; i++) {
+                                await Future.delayed(const Duration(seconds: 1));
+                                final granted = await ref.read(permissionServiceProvider)
+                                    .isBatteryOptimisationExempt();
+                                if (!mounted) return;
+                                if (granted) { _refresh(); return; }
+                              }
                             },
                           ),
 
@@ -377,7 +398,9 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                                 ? widget.onComplete
                                 : null,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: cs.primary,
+                              backgroundColor: _allGranted
+                                  ? Colors.green.shade600
+                                  : cs.primary,
                               foregroundColor: Colors.white,
                               disabledBackgroundColor:
                                   Colors.white.withOpacity(0.1),
@@ -385,12 +408,23 @@ class _PermissionPageState extends ConsumerState<PermissionPage>
                               shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14)),
                             ),
-                            child: Text(
-                              _allGranted
-                                  ? 'All Permissions Granted — Continue'
-                                  : 'Continue with Partial Permissions',
-                              style: const TextStyle(
-                                  fontSize: 15, fontWeight: FontWeight.w700),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                if (_allGranted) ...[
+                                  const Icon(Icons.check_circle_rounded,
+                                      size: 18, color: Colors.white),
+                                  const SizedBox(width: 8),
+                                ],
+                                Text(
+                                  widget.continueLabel ??
+                                      (_allGranted
+                                          ? 'All Granted — Continue'
+                                          : 'Continue with Partial Permissions'),
+                                  style: const TextStyle(
+                                      fontSize: 15, fontWeight: FontWeight.w700),
+                                ),
+                              ],
                             ),
                           ),
                         ),

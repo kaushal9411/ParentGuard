@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useEffect, useState } from 'react';
 import { Smartphone, Plus, Wifi, WifiOff, Copy, Check, X, Clock, Trash2 } from 'lucide-react';
 import Header from '@/components/Header';
@@ -80,7 +80,7 @@ function AddDeviceModal({ onClose, onAdded }: { onClose: () => void; onAdded: (d
             <div className="bg-blue-50 rounded-xl p-4 text-sm text-blue-700 mb-6">
               <p className="font-semibold mb-1">Setup instructions:</p>
               <ol className="list-decimal list-inside space-y-1 text-blue-600">
-                <li>Install ParentGuard app on child&apos;s phone</li>
+                <li>Install ParentGard app on child&apos;s phone</li>
                 <li>Open the app and tap &quot;Login&quot;</li>
                 <li>Use your parent account credentials</li>
                 <li>The device ID above will auto-link the phone</li>

@@ -23,10 +23,12 @@ class PermissionService {
     return photos || videos || storage;
   }
 
-  // Uses native PowerManager.isIgnoringBatteryOptimizations() — more reliable
-  // than permission_handler on OEM devices (Vivo, Xiaomi, Samsung, etc.)
-  Future<bool> isBatteryOptimisationExempt() =>
-      TrackingChannel.instance.isBatteryOptimizationExempt();
+  Future<bool> isBatteryOptimisationExempt() async {
+    // permission_handler check first (works on most standard Android builds)
+    if (await Permission.ignoreBatteryOptimizations.isGranted) return true;
+    // Native PowerManager fallback for OEMs where permission_handler returns false
+    return TrackingChannel.instance.isBatteryOptimizationExempt();
+  }
 
   Future<bool> isUsageStatsGranted() =>
       TrackingChannel.instance.hasUsagePermission();

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
@@ -87,12 +87,12 @@ function planStyle(idx: number, name: string) {
 const BLOGS = [
   { tag: 'Child Safety',    tagColor: 'bg-blue-100 text-blue-700',   title: '10 Signs Your Child May Be Experiencing Cyberbullying',      desc: 'Learn the warning signs of online harassment and how monitoring tools help you intervene early.', author: 'Dr. Priya Sharma', date: 'May 18, 2026', read: '5 min read', emoji: '🛡️', grad: 'from-blue-600 to-indigo-700' },
   { tag: 'Digital Parenting',tagColor: 'bg-purple-100 text-purple-700',title: 'Setting Healthy Screen Time Limits: A Complete Guide',      desc: 'Science-backed strategies to manage your child\'s device usage without constant battles.',     author: 'Ravi Mehta',      date: 'May 12, 2026', read: '7 min read', emoji: '⏱️', grad: 'from-purple-600 to-pink-600' },
-  { tag: 'App Guide',       tagColor: 'bg-green-100 text-green-700', title: 'How to Set Up ParentGuard in Under 5 Minutes',              desc: 'Step-by-step walkthrough for installing and configuring ParentGuard on your child\'s device.',  author: 'Tech Team',       date: 'May 5, 2026',  read: '3 min read', emoji: '📱', grad: 'from-green-500 to-teal-600' },
+  { tag: 'App Guide',       tagColor: 'bg-green-100 text-green-700', title: 'How to Set Up ParentGard in Under 5 Minutes',              desc: 'Step-by-step walkthrough for installing and configuring ParentGard on your child\'s device.',  author: 'Tech Team',       date: 'May 5, 2026',  read: '3 min read', emoji: '📱', grad: 'from-green-500 to-teal-600' },
 ];
 
 /* ─── Testimonials ───────────────────────────────────────────────────────────── */
 const TESTIMONIALS = [
-  { name: 'Sunita Patel', role: 'Mother of 2', text: 'ParentGuard gave me complete peace of mind. GPS tracking is incredibly accurate and the dashboard is so easy to use.' },
+  { name: 'Sunita Patel', role: 'Mother of 2', text: 'ParentGard gave me complete peace of mind. GPS tracking is incredibly accurate and the dashboard is so easy to use.' },
   { name: 'Rajesh Kumar', role: 'Father of 3', text: 'I caught my son talking to strangers through SMS monitoring. This app literally saved my family from a dangerous situation.' },
   { name: 'Anita Singh',  role: 'Single Parent',text: 'Geo-fencing alerts are a game changer. I\'m notified the moment my daughter leaves school. Can\'t imagine parenting without it.' },
 ];
@@ -188,10 +188,9 @@ export default function LandingPage() {
         ${scrolled ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100' : 'bg-transparent'}`}>
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <button onClick={() => scrollTo('home')} className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-700/30">
-              <Shield size={20} className="text-white" />
-            </div>
-            <span className={`font-extrabold text-lg ${scrolled ? 'text-gray-900' : 'text-white'}`}>ParentGuard</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/logo.png" alt="ParentGard" className="w-9 h-9 object-contain" />
+            <span className={`font-extrabold text-lg ${scrolled ? 'text-gray-900' : 'text-white'}`}>ParentGard</span>
           </button>
 
           <div className="hidden md:flex items-center gap-1">
@@ -327,7 +326,7 @@ export default function LandingPage() {
                 {/* Header */}
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <p className="text-white text-xs font-bold">ParentGuard</p>
+                    <p className="text-white text-xs font-bold">ParentGard</p>
                     <p className="text-green-400 text-[9px] flex items-center gap-1">
                       <span className="w-1.5 h-1.5 bg-green-400 rounded-full anim-blink" /> Live Monitoring
                     </p>
@@ -525,7 +524,7 @@ export default function LandingPage() {
               <div className="flex gap-1.5"><div className="w-3 h-3 bg-red-500 rounded-full" /><div className="w-3 h-3 bg-yellow-500 rounded-full" /><div className="w-3 h-3 bg-green-500 rounded-full" /></div>
               <div className="flex-1 mx-3 bg-gray-800 rounded-lg px-3 py-1 flex items-center gap-2">
                 <div className="w-3 h-3 text-green-400">🔒</div>
-                <span className="text-gray-400 text-xs">parentguard.in/dashboard</span>
+                <span className="text-gray-400 text-xs">ParentGard.in/dashboard</span>
               </div>
               <div className="flex items-center gap-1.5 text-green-400 text-xs"><span className="w-2 h-2 bg-green-400 rounded-full" />Live</div>
             </div>
@@ -536,7 +535,7 @@ export default function LandingPage() {
               <div className="w-52 bg-gray-950 border-r border-gray-800 flex flex-col p-3">
                 <div className="flex items-center gap-2.5 px-2 py-3 mb-4">
                   <div className="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center"><Shield size={16} className="text-white" /></div>
-                  <div><p className="text-white text-xs font-bold">ParentGuard</p><p className="text-indigo-400 text-[9px]">Parent Portal</p></div>
+                  <div><p className="text-white text-xs font-bold">ParentGard</p><p className="text-indigo-400 text-[9px]">Parent Portal</p></div>
                 </div>
                 {[
                   { icon: '🏠', label: 'Overview',       active: false },
@@ -702,7 +701,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-10 relative">
             <div className="hidden md:block absolute top-10 left-[calc(33%-24px)] right-[calc(33%-24px)] h-0.5 bg-gradient-to-r from-blue-100 via-indigo-200 to-blue-100" />
             {[
-              { step: '01', emoji: '📥', icon: Smartphone, title: 'Install on Child\'s Device', desc: 'Download ParentGuard APK from our website and install on your child\'s Android. No rooting needed.' },
+              { step: '01', emoji: '📥', icon: Smartphone, title: 'Install on Child\'s Device', desc: 'Download ParentGard APK from our website and install on your child\'s Android. No rooting needed.' },
               { step: '02', emoji: '🔑', icon: Shield,     title: 'Grant Permissions',           desc: 'Allow the necessary permissions via our guided setup wizard. Takes under 2 minutes.' },
               { step: '03', emoji: '📊', icon: Eye,        title: 'Monitor from Anywhere',       desc: 'Log in from any browser and get real-time insights into your child\'s device activity.' },
             ].map((s) => (
@@ -807,7 +806,7 @@ export default function LandingPage() {
               <span className="text-blue-600 text-sm font-semibold uppercase tracking-widest">About Us</span>
               <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mt-2 mb-6">Built by Parents, for Parents</h2>
               <p className="text-gray-600 leading-relaxed mb-5">
-                ParentGuard was founded in 2024 by a team of parents who struggled to keep their children safe in India's rapidly evolving digital landscape. We witnessed first-hand how cyberbullying, predatory behaviour, and excessive screen time were affecting Indian families.
+                ParentGard was founded in 2024 by a team of parents who struggled to keep their children safe in India's rapidly evolving digital landscape. We witnessed first-hand how cyberbullying, predatory behaviour, and excessive screen time were affecting Indian families.
               </p>
               <p className="text-gray-600 leading-relaxed mb-8">
                 Our mission is simple: give every Indian parent the tools to protect their children without unnecessarily invading their privacy. We believe in transparent, responsible monitoring that builds trust rather than breaking it.
@@ -901,10 +900,10 @@ export default function LandingPage() {
             <div>
               <span className="text-blue-600 text-sm font-semibold uppercase tracking-widest">Contact Us</span>
               <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900 mt-2 mb-5">We're Here to Help</h2>
-              <p className="text-gray-600 leading-relaxed mb-8">Have questions about ParentGuard? Our dedicated support team is available every day of the week.</p>
+              <p className="text-gray-600 leading-relaxed mb-8">Have questions about ParentGard? Our dedicated support team is available every day of the week.</p>
               <div className="space-y-5">
                 {[
-                  { icon: Mail,   label: 'Email Us',    value: 'support@parentguard.in',    desc: 'Reply within 4 hours on business days' },
+                  { icon: Mail,   label: 'Email Us',    value: 'support@ParentGard.in',    desc: 'Reply within 4 hours on business days' },
                   { icon: Phone,  label: 'Call Us',     value: '+91 98765 43210',            desc: 'Mon–Sat, 9 AM to 8 PM IST' },
                   { icon: MapPin, label: 'Our Office',  value: 'Mumbai, Maharashtra, India', desc: 'Visit by appointment only' },
                 ].map((c) => (
@@ -996,7 +995,7 @@ export default function LandingPage() {
         <div className="relative max-w-4xl mx-auto px-6 text-center">
           <div className="text-6xl mb-4">🛡️</div>
           <h2 className="text-3xl md:text-4xl font-extrabold text-white mb-4">Start Protecting Your Family Today</h2>
-          <p className="text-blue-100 text-lg mb-8">Join 50,000+ Indian families who trust ParentGuard. Free forever — no credit card required.</p>
+          <p className="text-blue-100 text-lg mb-8">Join 50,000+ Indian families who trust ParentGard. Free forever — no credit card required.</p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Link href="/auth/register"
               className="bg-white text-blue-700 hover:bg-blue-50 font-extrabold px-8 py-3.5 rounded-xl transition-all shadow-lg hover:shadow-xl text-sm">
@@ -1016,10 +1015,9 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-12">
             <div className="lg:col-span-2">
               <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-9 h-9 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg shadow-blue-700/30">
-                  <Shield size={18} className="text-white" />
-                </div>
-                <span className="text-white font-extrabold text-lg">ParentGuard</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.png" alt="ParentGard" className="w-9 h-9 object-contain" />
+                <span className="text-white font-extrabold text-lg">ParentGard</span>
               </div>
               <p className="text-sm leading-relaxed mb-5 max-w-xs">India's most trusted parental monitoring platform. Keeping children safe in the digital world since 2024.</p>
               <div className="flex gap-3">
@@ -1046,7 +1044,7 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="border-t border-gray-800 pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-xs">© 2026 ParentGuard. All rights reserved. Made with ❤️ in India.</p>
+            <p className="text-xs">© 2026 ParentGard. All rights reserved. Made with ❤️ in India.</p>
             <div className="flex items-center gap-5 text-xs">
               {['Privacy Policy', 'Terms of Service', 'Cookie Policy'].map((l) => (
                 <button key={l} className="hover:text-white transition-colors">{l}</button>

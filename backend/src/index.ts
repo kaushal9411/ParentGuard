@@ -14,7 +14,7 @@ import eventsRouter from './routes/events';
 import locationRouter from './routes/location';
 import usageRouter from './routes/usage';
 import notificationsRouter from './routes/notifications';
-import commandsRouter from './routes/commands';
+import commandsRouter, { RECORDINGS_DIR } from './routes/commands';
 import galleryRouter, { GALLERY_UPLOADS_DIR } from './routes/gallery';
 import fcmRouter from './routes/fcm';
 import subscriptionRouter from './routes/subscriptions';
@@ -31,7 +31,9 @@ app.use(cors());
 app.use(express.json({ limit: '20mb' }));
 
 // Serve uploaded gallery images as static files
-app.use('/uploads/gallery', express.static(GALLERY_UPLOADS_DIR));
+app.use('/uploads/gallery',     express.static(GALLERY_UPLOADS_DIR));
+// Serve screen recordings
+app.use('/uploads/recordings',  express.static(RECORDINGS_DIR));
 
 // Initialize Passport strategies (Local + JWT)
 initPassport();

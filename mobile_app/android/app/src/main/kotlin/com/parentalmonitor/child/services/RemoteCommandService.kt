@@ -62,19 +62,32 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                 "download_file"   -> downloadFile(payload.optString("path", ""))
                 "download_folder" -> downloadFolder(payload.optString("path", ""))
                 "start_mic",
-                "start_recording" -> startRecording()
+                "start_recording"      -> startRecording()
                 "stop_mic",
-                "stop_recording"  -> stopRecordingWithResult()
-                "lock_device"     -> { sendLockBroadcast(); """{"type":"status","message":"lock requested"}""" }
+                "stop_recording"       -> stopRecordingWithResult()
+                "start_screen_record"  -> startScreenRecord()
+                "stop_screen_record"   -> stopScreenRecord(token, commandId)
+                "lock_device"     -> {
+                    val hasSvc = AccessibilityMonitorService.instance != null
+                    sendLockBroadcast()
+                    if (hasSvc) """{"type":"ok","message":"Device locked"}"""
+                    else """{"type":"error","message":"Accessibility Service not running — lock may not work"}"""
+                }
                 "block_app"       -> {
                     val pkg = payload.optString("packageName", "")
-                    if (pkg.isNotBlank()) addBlockedApp(pkg)
-                    """{"type":"status","message":"blocked $pkg"}"""
+                    if (pkg.isBlank()) """{"type":"error","message":"packageName required"}"""
+                    else {
+                        addBlockedApp(pkg)
+                        """{"type":"ok","message":"Blocked: $pkg"}"""
+                    }
                 }
                 "unblock_app"     -> {
                     val pkg = payload.optString("packageName", "")
-                    if (pkg.isNotBlank()) removeBlockedApp(pkg)
-                    """{"type":"status","message":"unblocked $pkg"}"""
+                    if (pkg.isBlank()) """{"type":"error","message":"packageName required"}"""
+                    else {
+                        removeBlockedApp(pkg)
+                        """{"type":"ok","message":"Unblocked: $pkg"}"""
+                    }
                 }
                 else -> """{"type":"error","message":"unknown command: $commandType"}"""
             }
@@ -413,18 +426,39 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
     // ── Screenshot via AccessibilityService ──────────────────────────────────
 
     private fun takeScreenshot(): String {
-        val svc = AccessibilityMonitorService.instance
-            ?: return """{"type":"error","message":"Accessibility Service not running — enable it in Settings → Accessibility"}"""
+        // Service may be transiently null if the OS killed and is restarting it.
+        // Retry for up to 5 s before giving up.
+        var svc = AccessibilityMonitorService.instance
+        if (svc == null) {
+            repeat(5) {
+                Thread.sleep(1_000)
+                svc = AccessibilityMonitorService.instance
+                if (svc != null) return@repeat
+            }
+        }
+        // Check whether accessibility is enabled in settings to give a clear message
+        if (svc == null) {
+            val settingsFlat = android.provider.Settings.Secure.getString(
+                ctx.contentResolver,
+                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+            ) ?: ""
+            val msg = if (settingsFlat.contains(ctx.packageName))
+                "Accessibility Service is enabled but not yet running — please wait a moment and try again"
+            else
+                "Accessibility Service not running — enable it in Settings → Accessibility"
+            return """{"type":"error","message":"$msg"}"""
+        }
 
-        val latch  = java.util.concurrent.CountDownLatch(1)
-        var result = """{"type":"error","message":"timeout"}"""
+        val latch   = java.util.concurrent.CountDownLatch(1)
+        var result  = """{"type":"error","message":"timeout"}"""
+        val readySvc = svc!! // non-null guaranteed by the check above
 
         AccessibilityMonitorService.screenshotCallback = { r ->
             result = r
             AccessibilityMonitorService.screenshotCallback = null
             latch.countDown()
         }
-        svc.captureScreenshot()
+        readySvc.captureScreenshot()
         latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
         AccessibilityMonitorService.screenshotCallback = null
         return result
@@ -460,10 +494,149 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         }.toString()
     }
 
+    // ── Screen recording ──────────────────────────────────────────────────────
+
+    private fun startScreenRecord(): String {
+        if (ScreenRecordService.instance != null) {
+            return """{"type":"error","message":"Already recording — stop the current recording first"}"""
+        }
+
+        val latch   = java.util.concurrent.CountDownLatch(1)
+        var rc      = 0
+        var projData: android.content.Intent? = null
+
+        com.parentalmonitor.child.activities.ScreenCaptureActivity.projectionCallback = { resultCode, data ->
+            rc       = resultCode
+            projData = data
+            latch.countDown()
+        }
+
+        val intent = android.content.Intent(ctx,
+            com.parentalmonitor.child.activities.ScreenCaptureActivity::class.java)
+            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        ctx.startActivity(intent)
+
+        // Wait up to 30 s for the user to respond to the system dialog
+        if (!latch.await(30, java.util.concurrent.TimeUnit.SECONDS)) {
+            com.parentalmonitor.child.activities.ScreenCaptureActivity.projectionCallback = null
+            return """{"type":"error","message":"Timed out waiting for screen-capture permission"}"""
+        }
+
+        if (rc != android.app.Activity.RESULT_OK || projData == null) {
+            return """{"type":"error","message":"Screen capture permission denied"}"""
+        }
+
+        // ScreenCaptureActivity already started ScreenRecordService from its onActivityResult
+        // (Android 14 requires the service to be started from the Activity context).
+        // Wait up to 5 s for the service instance to appear (service start is async)
+        var waited = 0
+        while (ScreenRecordService.instance == null && waited < 5000) {
+            Thread.sleep(200)
+            waited += 200
+        }
+        if (ScreenRecordService.instance == null) {
+            val err = ScreenRecordService.lastError ?: "service never started"
+            ScreenRecordService.lastError = null
+            return """{"type":"error","message":"Start failed: $err"}"""
+        }
+        // Wait another 1.5 s — if beginRecording() crashes, onDestroy clears instance quickly
+        Thread.sleep(1500)
+        return if (ScreenRecordService.instance != null) {
+            """{"type":"ok","message":"Screen recording started"}"""
+        } else {
+            val err = ScreenRecordService.lastError ?: "unknown crash in beginRecording"
+            ScreenRecordService.lastError = null
+            """{"type":"error","message":"$err"}"""
+        }
+    }
+
+    private fun stopScreenRecord(token: String, commandId: String): String {
+        val svc = ScreenRecordService.instance
+            ?: return """{"type":"error","message":"No active screen recording"}"""
+
+        val latch       = java.util.concurrent.CountDownLatch(1)
+        var file: java.io.File? = null
+        var durationSec = 0
+
+        svc.stopAndGetFile { f, dur ->
+            file        = f
+            durationSec = dur
+            latch.countDown()
+        }
+
+        latch.await(30, java.util.concurrent.TimeUnit.SECONDS)
+
+        val f = file
+        if (f == null || !f.exists() || f.length() == 0L) {
+            return """{"type":"error","message":"no recording file produced"}"""
+        }
+
+        return try {
+            uploadRecordingFile(f, commandId, token, durationSec)
+        } finally {
+            try { f.delete() } catch (_: Exception) {}
+        }
+    }
+
+    private fun uploadRecordingFile(
+        file: java.io.File,
+        commandId: String,
+        token: String,
+        durationSec: Int,
+    ): String {
+        val conn = (java.net.URL("$baseUrl/api/commands/$commandId/recording-file")
+            .openConnection() as java.net.HttpURLConnection).apply {
+            requestMethod = "POST"
+            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("Content-Type",  "video/mp4")
+            setRequestProperty("X-Duration",    durationSec.toString())
+            doOutput        = true
+            connectTimeout  = 15_000
+            readTimeout     = 300_000   // 5 min for large files
+            setFixedLengthStreamingMode(file.length())
+        }
+
+        return try {
+            file.inputStream().use { input ->
+                conn.outputStream.use { out ->
+                    input.copyTo(out, bufferSize = 64 * 1024)
+                }
+            }
+            val code = conn.responseCode
+            if (code == 200 || code == 201) {
+                val body = conn.inputStream.bufferedReader().readText()
+                val resp = org.json.JSONObject(body)
+                org.json.JSONObject().apply {
+                    put("type",     "video_url")
+                    put("url",      resp.getString("url"))
+                    put("duration", durationSec)
+                    put("size",     file.length())
+                }.toString()
+            } else {
+                val err = try { conn.errorStream?.bufferedReader()?.readText()?.take(200) } catch (_: Exception) { null }
+                """{"type":"error","message":"upload HTTP $code: ${err ?: "unknown"}"}"""
+            }
+        } catch (e: Exception) {
+            """{"type":"error","message":"upload failed: ${e.message?.take(200)}"}"""
+        } finally {
+            try { conn.disconnect() } catch (_: Exception) {}
+        }
+    }
+
     // ── Lock device ───────────────────────────────────────────────────────────
 
     private fun sendLockBroadcast() {
-        ctx.sendBroadcast(android.content.Intent("com.parentalmonitor.LOCK_SCREEN"))
+        // GLOBAL_ACTION_LOCK_SCREEN is available from API 28 and works without Device Admin.
+        // Must be dispatched from the main thread via the running AccessibilityService.
+        val svc = AccessibilityMonitorService.instance
+        if (svc != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                svc.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN)
+            }
+        } else {
+            // Fallback for API < 28 or if accessibility service not running
+            ctx.sendBroadcast(android.content.Intent("com.parentalmonitor.LOCK_SCREEN"))
+        }
     }
 
     // ── Geofences ─────────────────────────────────────────────────────────────

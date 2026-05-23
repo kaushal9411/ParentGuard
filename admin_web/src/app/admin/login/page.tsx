@@ -38,10 +38,9 @@ export default function AdminLoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-10">
-          <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-500/30">
-            <ShieldCheck size={32} className="text-white" />
-          </div>
-          <h1 className="text-2xl font-extrabold text-white">ParentGuard Admin</h1>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="ParentGard" className="w-16 h-16 object-contain mx-auto mb-4" />
+          <h1 className="text-2xl font-extrabold text-white">ParentGard Admin</h1>
           <p className="text-gray-400 mt-1 text-sm">Restricted access — authorised personnel only</p>
         </div>
 

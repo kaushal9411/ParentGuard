@@ -1,7 +1,11 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
+import fs from 'fs/promises';
+import path from 'path';
 import { z } from 'zod';
 import { prisma } from '../config/database';
 import { authenticate } from '../middleware/auth';
+
+export const RECORDINGS_DIR = path.join(__dirname, '../../uploads/recordings');
 
 const router = Router();
 
@@ -98,5 +102,41 @@ router.get('/app-blocks', authenticate, async (req, res) => {
   });
   res.json(rules);
 });
+
+// ── POST /api/commands/:commandId/recording-file ──────────────────────────────
+// Device streams raw MP4 after stop_screen_record completes.
+// Saves to disk, returns { url } — caller then reports result via /status.
+// Headers: Authorization, Content-Type: video/mp4, X-Duration (seconds)
+router.post(
+  '/:commandId/recording-file',
+  express.raw({ type: () => true, limit: '300mb' }),
+  authenticate,
+  async (req, res) => {
+    const { commandId } = req.params as { commandId: string };
+    const durationSec   = parseInt((req.headers['x-duration'] as string) ?? '0', 10) || 0;
+
+    const cmd = await prisma.remoteCommand.findUnique({ where: { id: commandId } });
+    if (!cmd) { res.status(404).json({ error: 'Command not found' }); return; }
+
+    const device = await prisma.device.findFirst({
+      where: { deviceId: cmd.deviceId, userId: req.auth.userId },
+    });
+    if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
+
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      res.status(400).json({ error: 'Empty body' }); return;
+    }
+
+    const dir      = path.join(RECORDINGS_DIR, cmd.deviceId);
+    await fs.mkdir(dir, { recursive: true });
+    const fileName = `${commandId}_${Date.now()}.mp4`;
+    const filePath = path.join(dir, fileName);
+    await fs.writeFile(filePath, body);
+
+    const url = `/uploads/recordings/${cmd.deviceId}/${fileName}`;
+    res.json({ ok: true, url, size: body.length, duration: durationSec });
+  }
+);
 
 export default router;

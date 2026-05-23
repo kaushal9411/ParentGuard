@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useEffect, useState, useCallback } from 'react';
 import {
   CreditCard, Plus, Edit2, Trash2, Users, Check, X,
@@ -345,7 +345,7 @@ function SendPaymentLinkModal({ user, plans, onClose }: {
             </div>
             <div>
               <label className="text-gray-400 text-xs mb-1 block">Link Description (optional)</label>
-              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. ParentGuard Premium Subscription" className={inp} />
+              <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. ParentGard Premium Subscription" className={inp} />
             </div>
             <div className="flex gap-3 pt-1">
               <button onClick={onClose} className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">Cancel</button>

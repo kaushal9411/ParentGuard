@@ -145,7 +145,7 @@ class TrackingForegroundService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID, "Device Monitor", NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "ParentGard", NotificationManager.IMPORTANCE_LOW
             ).apply {
                 setShowBadge(false)
                 enableLights(false)
@@ -157,7 +157,7 @@ class TrackingForegroundService : Service() {
 
     private fun buildNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Device Monitor")
+            .setContentTitle("ParentGard")
             .setContentText("Running in background")
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)

@@ -289,60 +289,115 @@ function OverviewTab({
 // ─── Tab: Location ────────────────────────────────────────────────────────────
 function LocationTab({ data }: { data: UserDetail }) {
   const { recentLocations } = data;
-  const latest = recentLocations[0];
+  const [pinned, setPinned] = useState(recentLocations[0] ?? null);
+
+  const isLatest = pinned?.id === recentLocations[0]?.id;
+  const mapsUrl = pinned ? `https://www.google.com/maps?q=${pinned.latitude},${pinned.longitude}` : null;
 
   return (
-    <div className="space-y-6">
-      {latest && (
-        <Card className="overflow-hidden">
-          <div className="p-4 border-b border-gray-800 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <MapPin size={16} className="text-indigo-400" />
-              <span className="text-white font-bold">Live Map</span>
-            </div>
-            <span className="text-xs text-gray-500">Last seen {timeAgo(latest.capturedAt)}</span>
+    <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+      {/* Map */}
+      <div className="xl:col-span-3 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden" style={{ height: 460 }}>
+        {!pinned ? (
+          <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-3">
+            <MapPin size={48} className="opacity-20" />
+            <p className="text-sm">No location data</p>
           </div>
+        ) : (
           <iframe
+            key={`${pinned.latitude},${pinned.longitude}`}
             title="location-map"
-            className="w-full h-80 border-0"
-            loading="lazy"
-            src={`https://maps.google.com/maps?q=${latest.latitude},${latest.longitude}&z=16&output=embed`}
+            src={`https://maps.google.com/maps?q=${pinned.latitude},${pinned.longitude}&z=15&output=embed`}
+            width="100%" height="100%"
+            style={{ border: 0 }}
+            allowFullScreen loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
           />
-          <div className="p-4 bg-gray-800/50">
-            <p className="text-white text-sm font-mono">{latest.latitude.toFixed(6)}, {latest.longitude.toFixed(6)}</p>
-            {latest.address && <p className="text-gray-400 text-sm mt-0.5">{latest.address}</p>}
-            {latest.accuracy && <p className="text-gray-500 text-xs mt-1">Accuracy: ±{latest.accuracy.toFixed(0)}m</p>}
-          </div>
-        </Card>
-      )}
+        )}
+      </div>
 
-      <Card className="p-6">
-        <SectionHeader icon={<MapPin size={18} />} title="Location History" count={recentLocations.length} />
-        {recentLocations.length === 0 ? <Empty msg="No location data" /> : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-800 text-gray-400 text-xs">
-                  <th className="text-left pb-3 pr-4">Coordinates</th>
-                  <th className="text-left pb-3 pr-4">Address</th>
-                  <th className="text-left pb-3 pr-4">Accuracy</th>
-                  <th className="text-left pb-3">Time</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800/50">
-                {recentLocations.map((l) => (
-                  <tr key={l.id} className="hover:bg-gray-800/30 transition-colors">
-                    <td className="py-3 pr-4 font-mono text-xs text-indigo-300">{l.latitude.toFixed(5)}, {l.longitude.toFixed(5)}</td>
-                    <td className="py-3 pr-4 text-gray-300 max-w-xs truncate">{l.address ?? '—'}</td>
-                    <td className="py-3 pr-4 text-gray-400">{l.accuracy ? `±${l.accuracy.toFixed(0)}m` : '—'}</td>
-                    <td className="py-3 text-gray-500 text-xs whitespace-nowrap">{timeAgo(l.capturedAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* Right panel */}
+      <div className="xl:col-span-2 space-y-4">
+        {/* Info card */}
+        {pinned && (
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+            <h3 className="font-bold text-white mb-3 flex items-center gap-2 text-sm">
+              <MapPin size={16} className="text-indigo-400" />
+              {isLatest ? 'Current Location' : 'Selected Location'}
+              {!isLatest && (
+                <button onClick={() => setPinned(recentLocations[0])}
+                  className="ml-auto text-xs text-indigo-400 hover:underline font-normal">
+                  ← Back to latest
+                </button>
+              )}
+              {mapsUrl && isLatest && (
+                <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                  className="ml-auto text-xs text-indigo-400 hover:underline font-normal">
+                  Open in Maps ↗
+                </a>
+              )}
+            </h3>
+            <div className="space-y-2.5 text-sm">
+              {[
+                { label: 'Latitude',  value: pinned.latitude.toFixed(6) },
+                { label: 'Longitude', value: pinned.longitude.toFixed(6) },
+                { label: 'Accuracy',  value: pinned.accuracy ? `±${Math.round(pinned.accuracy)}m` : '—' },
+                { label: 'Address',   value: pinned.address ?? '—' },
+                { label: 'Time',      value: new Date(pinned.capturedAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' }) },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex justify-between items-start gap-2">
+                  <span className="text-gray-500 flex-shrink-0">{label}</span>
+                  <span className="font-medium text-gray-200 text-right break-all">{value}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
-      </Card>
+
+        {/* History list */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+          <h3 className="font-bold text-white mb-3 flex items-center gap-2 text-sm">
+            <MapPin size={16} className="text-gray-500" /> History
+            <span className="ml-auto text-xs text-gray-600 font-normal">Click to view on map</span>
+          </h3>
+          {recentLocations.length === 0 ? (
+            <p className="text-gray-600 text-sm text-center py-6">No history available</p>
+          ) : (
+            <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+              {recentLocations.map((l) => {
+                const isSelected = pinned?.id === l.id;
+                return (
+                  <button
+                    key={l.id}
+                    onClick={() => setPinned(l)}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl text-sm text-left transition-all
+                      ${isSelected
+                        ? 'bg-indigo-500/10 border border-indigo-500/30 ring-1 ring-indigo-500/20'
+                        : 'bg-gray-800/50 hover:bg-gray-800 border border-transparent'
+                      }`}
+                  >
+                    <MapPin size={14} className={isSelected ? 'text-indigo-400 flex-shrink-0' : 'text-gray-600 flex-shrink-0'} />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-mono text-xs text-gray-300 truncate">
+                        {l.latitude.toFixed(5)}, {l.longitude.toFixed(5)}
+                      </p>
+                      {l.address && (
+                        <p className="text-xs text-gray-500 truncate">{l.address}</p>
+                      )}
+                      <p className="text-xs text-gray-600">
+                        {timeAgo(l.capturedAt)} · {new Date(l.capturedAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <span className="flex-shrink-0 w-2 h-2 rounded-full bg-indigo-400" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

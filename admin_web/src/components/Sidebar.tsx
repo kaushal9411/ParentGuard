@@ -97,11 +97,10 @@ export default function Sidebar() {
     <aside className="w-64 min-h-screen bg-sidebar flex flex-col overflow-y-auto">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-white/10 flex-shrink-0">
-        <div className="w-9 h-9 bg-primary-light rounded-xl flex items-center justify-center flex-shrink-0">
-          <Shield size={20} className="text-white" />
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logo.png" alt="ParentGard" className="w-10 h-10 object-contain flex-shrink-0" />
         <div>
-          <p className="text-white font-bold text-base leading-none">ParentGuard</p>
+          <p className="text-white font-bold text-base leading-none">ParentGard</p>
           <p className="text-blue-300 text-xs mt-0.5">Parent Portal</p>
         </div>
       </div>

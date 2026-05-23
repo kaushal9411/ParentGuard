@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 import { useEffect, useState, useCallback } from 'react';
 import Script from 'next/script';
 import axios from 'axios';
@@ -87,7 +87,7 @@ function openRazorpayCheckout(opts: {
     order_id:    opts.orderId,
     amount:      opts.amount,
     currency:    opts.currency,
-    name:        'ParentGuard',
+    name:        'ParentGard',
     description: `${opts.planName} Plan Subscription`,
     image:       '/icon.png',
     prefill: { name: opts.userName, email: opts.userEmail },
