@@ -96,17 +96,26 @@ function fmtBytes(bytes: number): string {
 // ─── Tab definitions ──────────────────────────────────────────────────────────
 type Tab = 'overview' | 'location' | 'calls' | 'sms' | 'contacts' | 'gallery' | 'notifications' | 'usage' | 'browsing' | 'remote';
 
-const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
-  { key: 'overview',      label: 'Overview',       icon: <User size={14} /> },
-  { key: 'location',      label: 'Location',       icon: <MapPin size={14} /> },
-  { key: 'calls',         label: 'Call Logs',      icon: <Phone size={14} /> },
-  { key: 'sms',           label: 'SMS',            icon: <MessageSquare size={14} /> },
-  { key: 'contacts',      label: 'Contacts',       icon: <ContactIcon size={14} /> },
-  { key: 'gallery',       label: 'Gallery',        icon: <Image size={14} /> },
-  { key: 'notifications', label: 'Notifications',  icon: <Bell size={14} /> },
-  { key: 'usage',         label: 'App Usage',      icon: <BarChart2 size={14} /> },
-  { key: 'browsing',      label: 'Browsing',       icon: <Globe size={14} /> },
-  { key: 'remote',        label: 'Remote Access',  icon: <Radio size={14} /> },
+interface TabDef { key: Tab; label: string; Icon: LucideIcon; gradient: string; color: string; }
+
+const TABS: TabDef[] = [
+  { key: 'overview',      label: 'Overview',       Icon: User,          gradient: 'from-indigo-500 to-violet-600',  color: '#6366f1' },
+  { key: 'location',      label: 'Location',       Icon: MapPin,        gradient: 'from-emerald-500 to-teal-600',   color: '#10b981' },
+  { key: 'calls',         label: 'Call Logs',      Icon: Phone,         gradient: 'from-sky-500 to-blue-600',       color: '#0ea5e9' },
+  { key: 'sms',           label: 'SMS',            Icon: MessageSquare, gradient: 'from-violet-500 to-purple-600',  color: '#8b5cf6' },
+  { key: 'contacts',      label: 'Contacts',       Icon: ContactIcon,   gradient: 'from-orange-500 to-amber-600',   color: '#f97316' },
+  { key: 'gallery',       label: 'Gallery',        Icon: Image,         gradient: 'from-pink-500 to-rose-600',      color: '#ec4899' },
+  { key: 'notifications', label: 'Notifications',  Icon: Bell,          gradient: 'from-yellow-400 to-orange-500',  color: '#f59e0b' },
+  { key: 'usage',         label: 'App Usage',      Icon: BarChart2,     gradient: 'from-cyan-500 to-teal-600',      color: '#06b6d4' },
+  { key: 'browsing',      label: 'Browsing',       Icon: Globe,         gradient: 'from-blue-500 to-indigo-600',    color: '#3b82f6' },
+  { key: 'remote',        label: 'Remote Access',  Icon: Radio,         gradient: 'from-red-500 to-rose-600',       color: '#ef4444' },
+];
+
+const NAV_GROUPS: { label: string; keys: Tab[] }[] = [
+  { label: 'General',  keys: ['overview'] },
+  { label: 'Monitor',  keys: ['location', 'calls', 'sms', 'contacts', 'gallery', 'notifications'] },
+  { label: 'Activity', keys: ['usage', 'browsing'] },
+  { label: 'Control',  keys: ['remote'] },
 ];
 
 // ─── Small UI atoms ───────────────────────────────────────────────────────────
@@ -1436,6 +1445,13 @@ export default function UserDetailPage() {
   const [data, setData]                   = useState<UserDetail | null>(null);
   const [loading, setLoading]             = useState(true);
   const [tab, setTab]                     = useState<Tab>('overview');
+  const [contentVisible, setContentVisible] = useState(true);
+
+  function switchTab(key: Tab) {
+    if (key === tab) return;
+    setContentVisible(false);
+    setTimeout(() => { setTab(key); setContentVisible(true); }, 130);
+  }
   const [deleting, setDeleting]           = useState(false);
 
   const fetchData = useCallback((devId?: string | null) => {
@@ -1557,7 +1573,7 @@ export default function UserDetailPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Top header */}
-      <div className="px-8 pt-8 pb-0 space-y-4">
+      <div className="px-8 pt-8 pb-5 border-b border-gray-800/60 space-y-4">
         <button onClick={() => router.push('/admin/users')}
           className="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors">
           <ArrowLeft size={16} /> Back to Users
@@ -1645,23 +1661,70 @@ export default function UserDetailPage() {
           </div>
         )}
 
-        {/* Tab bar */}
-        <div className="flex items-center gap-1 overflow-x-auto pb-px scrollbar-hide">
-          {TABS.map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-xs font-semibold whitespace-nowrap transition-colors
-                ${tab === t.key
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* Tab content */}
-      <div className="flex-1 p-8 overflow-y-auto">
-        {tabContent[tab]}
+      {/* Body: vertical nav + content */}
+      <div className="flex-1 flex min-h-0">
+
+        {/* ── Left vertical navigation ── */}
+        <nav className="w-56 flex-shrink-0 border-r border-gray-800/50 bg-gray-950/30 py-5 overflow-y-auto">
+          {NAV_GROUPS.map(({ label, keys }) => {
+            const groupTabs = keys.map((k) => TABS.find((t) => t.key === k)!);
+            return (
+              <div key={label} className="mb-5">
+                <p className="text-[10px] font-bold tracking-widest uppercase text-gray-600 px-4 mb-1.5 select-none">
+                  {label}
+                </p>
+                {groupTabs.map((t) => {
+                  const active = tab === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => switchTab(t.key)}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 relative group
+                        transition-all duration-150 ease-out
+                        ${active ? 'text-white' : 'text-gray-500 hover:text-gray-200'}`}
+                    >
+                      {/* Animated left border indicator */}
+                      <span
+                        className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full transition-all duration-200
+                          ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-20'}`}
+                        style={{ backgroundColor: t.color }}
+                      />
+
+                      {/* Hover background */}
+                      <span className={`absolute inset-x-2 inset-y-0.5 rounded-xl transition-all duration-150
+                        ${active ? 'bg-gray-800/80' : 'bg-transparent group-hover:bg-gray-800/40'}`} />
+
+                      {/* Colored icon box */}
+                      <span className={`relative z-10 w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 transition-all duration-200
+                        ${active
+                          ? `bg-gradient-to-br ${t.gradient} shadow-lg`
+                          : 'bg-gray-800 group-hover:bg-gray-750'}`}>
+                        <t.Icon size={15} className={active ? 'text-white' : 'text-gray-500 group-hover:text-gray-300'} />
+                      </span>
+
+                      <span className="relative z-10 text-xs font-semibold flex-1 text-left">{t.label}</span>
+
+                      {active && (
+                        <ChevronRight size={12} className="relative z-10 text-gray-500 mr-1 flex-shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* ── Content area ── */}
+        <div
+          className="flex-1 p-7 overflow-y-auto"
+          style={{ opacity: contentVisible ? 1 : 0, transition: 'opacity 0.13s ease' }}
+        >
+          {tabContent[tab]}
+        </div>
+
       </div>
     </div>
   );
