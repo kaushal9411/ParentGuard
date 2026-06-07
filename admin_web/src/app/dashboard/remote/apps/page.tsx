@@ -78,9 +78,7 @@ export default function RemoteAppsPage() {
       } else {
         await userAppBlocksApi.delete(existing!.id);
       }
-      await userCommandsApi.issue(selected, willBlock ? 'block_app' : 'unblock_app', {
-        packageName: app.packageName,
-      });
+      await userCommandsApi.issue(selected, willBlock ? 'block_app' : 'unblock_app', { packageName: app.packageName });
       await fetchBlocks();
       toast.success(willBlock ? `Blocking ${app.appName}` : `Unblocking ${app.appName}`);
     } catch {

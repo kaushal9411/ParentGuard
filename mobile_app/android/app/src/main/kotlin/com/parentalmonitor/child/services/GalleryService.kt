@@ -10,6 +10,8 @@ import android.util.Size
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
+import java.net.HttpURLConnection
+import java.net.URL
 
 class GalleryService(private val ctx: Context) {
 
@@ -262,8 +264,91 @@ class GalleryService(private val ctx: Context) {
             bmp.recycle()
             Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
         } catch (e: Exception) {
-            android.util.Log.w("GalleryService", "readVideoFrame failed for $uri: ${e.message}")
+            android.util.Log.w(TAG, "readVideoFrame failed for $uri: ${e.message}")
             ""
         }
+    }
+
+    /** Uploads new gallery items (images + videos) since last sync to /api/events/batch. */
+    fun syncGallery(token: String, deviceId: String, baseUrl: String) {
+        val permOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ctx.checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED ||
+            ctx.checkSelfPermission(android.Manifest.permission.READ_MEDIA_VIDEO) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        } else {
+            ctx.checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (!permOk) {
+            android.util.Log.w(TAG, "SKIP — storage permission not granted")
+            return
+        }
+
+        val prefs        = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val sinceMs      = prefs.getLong(KEY_LAST, 0L)
+        android.util.Log.d(TAG, "Syncing gallery since epoch $sinceMs …")
+
+        val items = try { JSONArray(getGalleryItems(sinceMs)) } catch (_: Exception) { return }
+        if (items.length() == 0) {
+            android.util.Log.d(TAG, "No new gallery items since last sync")
+            return
+        }
+        android.util.Log.d(TAG, "Found ${items.length()} new gallery item(s) — uploading in chunks …")
+
+        var uploaded        = 0
+        var latestDateAdded = sinceMs
+        val chunkSize       = 30
+
+        for (start in 0 until items.length() step chunkSize) {
+            val end    = minOf(start + chunkSize, items.length())
+            val events = JSONArray()
+            for (i in start until end) {
+                val item      = items.getJSONObject(i)
+                val dateAdded = item.optLong("dateAdded", 0L)
+                if (dateAdded > latestDateAdded) latestDateAdded = dateAdded
+                events.put(JSONObject().apply {
+                    put("id",      "${deviceId}_gallery_${item.optString("id")}")
+                    put("type",    "galleryItem")
+                    put("payload", item)
+                })
+            }
+            val body = JSONObject().apply {
+                put("deviceId", deviceId)
+                put("events",   events)
+            }.toString().toByteArray(Charsets.UTF_8)
+            try {
+                val conn = (URL("$baseUrl/api/events/batch").openConnection() as HttpURLConnection).apply {
+                    requestMethod = "POST"
+                    setRequestProperty("Authorization", "Bearer $token")
+                    setRequestProperty("Content-Type",  "application/json")
+                    doOutput       = true
+                    connectTimeout = 15_000
+                    readTimeout    = 60_000
+                    setFixedLengthStreamingMode(body.size.toLong())
+                }
+                conn.outputStream.use { it.write(body) }
+                val code = conn.responseCode
+                conn.disconnect()
+                if (code == 200 || code == 201) {
+                    uploaded += (end - start)
+                } else {
+                    android.util.Log.w(TAG, "Gallery chunk HTTP $code")
+                }
+            } catch (e: Exception) {
+                android.util.Log.w(TAG, "Gallery chunk upload failed: ${e.message}")
+            }
+        }
+
+        if (uploaded > 0) {
+            prefs.edit().putLong(KEY_LAST, latestDateAdded).apply()
+            android.util.Log.d(TAG, "Synced $uploaded gallery items ✓")
+        }
+    }
+
+    companion object {
+        private const val TAG      = "GalleryService"
+        private const val PREFS    = "pm_gallery"
+        private const val KEY_LAST = "last_gallery_ts"
     }
 }

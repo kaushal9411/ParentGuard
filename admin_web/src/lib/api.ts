@@ -141,10 +141,10 @@ export const userGeofencesApi = {
 export const userAppBlocksApi = {
   list:   (deviceId: string) =>
     api.get('/api/user/app-blocks', { params: { deviceId } }),
-  create: (data: { deviceId: string; packageName: string; appName: string; isBlocked?: boolean }) =>
+  create: (data: { deviceId: string; packageName: string; appName: string; isBlocked?: boolean; ruleType?: 'block' | 'hide' }) =>
     api.post('/api/user/app-blocks', data),
-  update: (id: string, isBlocked: boolean) =>
-    api.patch(`/api/user/app-blocks/${id}`, { isBlocked }),
+  update: (id: string, isBlocked: boolean, ruleType?: 'block' | 'hide') =>
+    api.patch(`/api/user/app-blocks/${id}`, { isBlocked, ...(ruleType ? { ruleType } : {}) }),
   delete: (id: string) =>
     api.delete(`/api/user/app-blocks/${id}`),
 };

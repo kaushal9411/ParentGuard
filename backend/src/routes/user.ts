@@ -277,6 +277,7 @@ const AppBlockSchema = z.object({
   packageName: z.string().min(1),
   appName:     z.string().min(1),
   isBlocked:   z.boolean().optional().default(true),
+  ruleType:    z.enum(['block', 'hide']).optional().default('block'),
 });
 
 // GET /api/user/app-blocks?deviceId=xxx
@@ -299,14 +300,14 @@ router.post('/app-blocks', authenticate, requireFeature('appBlocking'), async (r
   const parsed = AppBlockSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.flatten() }); return; }
 
-  const { deviceId, packageName, appName, isBlocked } = parsed.data;
+  const { deviceId, packageName, appName, isBlocked, ruleType } = parsed.data;
   const device = await ownDevice(deviceId, req.auth.userId);
   if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-  const rule = await prisma.appBlockRule.upsert({
+  const rule = await (prisma.appBlockRule as any).upsert({
     where:  { deviceId_packageName: { deviceId, packageName } },
-    update: { isBlocked, appName },
-    create: { deviceId, packageName, appName, isBlocked: isBlocked ?? true },
+    update: { isBlocked, appName, ruleType },
+    create: { deviceId, packageName, appName, isBlocked: isBlocked ?? true, ruleType: ruleType ?? 'block' },
   });
   res.status(201).json(rule);
 });
@@ -319,10 +320,10 @@ router.patch('/app-blocks/:id', authenticate, async (req, res) => {
   const device = await ownDevice(rule.deviceId, req.auth.userId);
   if (!device) { res.status(403).json({ error: 'Forbidden' }); return; }
 
-  const { isBlocked } = req.body as { isBlocked: boolean };
-  const updated = await prisma.appBlockRule.update({
+  const { isBlocked, ruleType } = req.body as { isBlocked: boolean; ruleType?: string };
+  const updated = await (prisma.appBlockRule as any).update({
     where: { id: rule.id },
-    data:  { isBlocked },
+    data:  { isBlocked, ...(ruleType ? { ruleType } : {}) },
   });
   res.json(updated);
 });

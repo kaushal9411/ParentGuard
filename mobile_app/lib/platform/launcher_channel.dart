@@ -36,4 +36,16 @@ class LauncherChannel {
       return false;
     }
   }
+
+  /// Hide app completely: hides icon, silences the service notification,
+  /// and moves the app to background. Background sync keeps running.
+  static Future<bool> hideApp() async {
+    try {
+      final result = await platform.invokeMethod<bool>('hideApp');
+      return result ?? false;
+    } catch (e) {
+      print('Failed to hide app: $e');
+      return false;
+    }
+  }
 }

@@ -88,6 +88,11 @@ class AccessibilityMonitorService : AccessibilityService() {
             screenshotCallback?.invoke("""{"type":"error","message":"screenshot requires Android 11+"}""")
             return
         }
+        doCapture(retryOnFailure = true)
+    }
+
+    @SuppressLint("NewApi")
+    private fun doCapture(retryOnFailure: Boolean) {
         takeScreenshot(Display.DEFAULT_DISPLAY, mainExecutor,
             object : TakeScreenshotCallback {
                 override fun onSuccess(result: ScreenshotResult) {
@@ -119,7 +124,21 @@ class AccessibilityMonitorService : AccessibilityService() {
                     }
                 }
                 override fun onFailure(code: Int) {
-                    screenshotCallback?.invoke("""{"type":"error","message":"screenshot failed code $code"}""")
+                    if (retryOnFailure && code == 1) {
+                        // Code 1 = TAKE_SCREENSHOT_ERROR_UNKNOWN — often transient (FLAG_SECURE
+                        // on the previous window, camera preview lingering, etc.). Retry once.
+                        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                            doCapture(retryOnFailure = false)
+                        }, 800)
+                    } else {
+                        val reason = when (code) {
+                            1 -> "unknown — current window may have FLAG_SECURE (banking app, lock screen)"
+                            2 -> "timed out"
+                            3 -> "interrupted"
+                            else -> "code $code"
+                        }
+                        screenshotCallback?.invoke("""{"type":"error","message":"screenshot failed: $reason"}""")
+                    }
                 }
             }
         )

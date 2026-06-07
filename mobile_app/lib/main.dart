@@ -22,6 +22,9 @@ void callbackDispatcher() {
         await BackgroundWorker.captureDeviceStatus();
       case AppConstants.usageTaskName:
         await BackgroundWorker.captureUsageSnapshot();
+      case AppConstants.fullSyncTaskName:
+        // Triggered by sync_now remote command — full immediate data capture + upload
+        await BackgroundWorker.captureAllAndSync();
     }
     return true;
   });

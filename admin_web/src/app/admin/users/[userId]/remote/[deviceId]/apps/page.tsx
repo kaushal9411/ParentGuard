@@ -70,9 +70,8 @@ export default function AdminAppsPage() {
     setBusyPkg(app.packageName);
     try {
       await adminApi.setAppBlock(deviceId, app.packageName, app.appName, willBlock);
-      await adminApi.issueCommand(deviceId, willBlock ? 'block_app' : 'unblock_app', {
-        packageName: app.packageName,
-      });
+      if (!willBlock) await adminApi.deleteAppBlock(existing!.id);
+      await adminApi.issueCommand(deviceId, willBlock ? 'block_app' : 'unblock_app', { packageName: app.packageName });
       await fetchBlocks();
       toast.success(willBlock ? `Blocking ${app.appName}` : `Unblocking ${app.appName}`);
     } catch {
@@ -82,7 +81,6 @@ export default function AdminAppsPage() {
     }
   }
 
-  // Latest completed scan result
   const latest  = commands.find((c) => c.status === 'completed' && c.result);
   const pending = commands.find((c) => ['pending', 'delivered', 'executing'].includes(c.status));
 
@@ -96,7 +94,6 @@ export default function AdminAppsPage() {
     a.appName.toLowerCase().includes(search.toLowerCase()) ||
     a.packageName.toLowerCase().includes(search.toLowerCase()));
 
-  // Build a quick lookup set for blocked packages
   const blockedSet = new Set(blocks.filter((b) => b.isBlocked).map((b) => b.packageName));
 
   return (

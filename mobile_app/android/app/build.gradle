@@ -20,7 +20,7 @@ if (project.hasProperty('dart-defines')) {
         }
     }
 }
-def backendUrl = dartDefines.getOrDefault('BACKEND_URL', 'http://172.20.10.2:3000')
+def backendUrl = dartDefines.getOrDefault('BACKEND_URL', 'http://localhost:3000')
 
 android {
     namespace "com.parentalmonitor.child"
@@ -84,4 +84,8 @@ dependencies {
 
     // Core KTX
     implementation "androidx.core:core-ktx:1.12.0"
+
+    // WorkManager (explicitly declared — already transitive via flutter_workmanager,
+    // but declared here so we can reference WorkManager KTX APIs directly from Kotlin)
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
 }

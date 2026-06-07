@@ -3,14 +3,14 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Shield, Loader, CheckCircle, AlertCircle, Lock, RefreshCw,
-  Wifi, WifiOff, Ban, ShieldOff, Clock, Trash2,
+  Wifi, WifiOff, Ban, ShieldOff, Clock, Trash2, EyeOff, Eye,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
 import { toast } from 'sonner';
 
 interface Cmd { id: string; commandType: string; status: string; result: string | null; issuedAt: string; }
-interface DeviceInfo { deviceId: string; name: string; isOnline: boolean; }
+interface DeviceInfo { deviceId: string; name: string; isOnline: boolean; appHidden: boolean; }
 interface AppBlock { id: string; packageName: string; appName: string; isBlocked: boolean; }
 
 function parseResult(raw: string | null) {
@@ -99,7 +99,7 @@ export default function AdminRemoteQuickPage() {
     try {
       const r = await adminApi.deviceCommands(deviceId);
       setCommands((r.data as Cmd[]).filter((c) =>
-        ['lock_device', 'block_app', 'unblock_app'].includes(c.commandType)));
+        ['lock_device', 'block_app', 'unblock_app', 'hide_app', 'show_app'].includes(c.commandType)));
     } catch {}
   }, [deviceId]);
 
@@ -175,6 +175,43 @@ export default function AdminRemoteQuickPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-8 space-y-6">
+
+        {/* ── App Visibility ───────────────────────────────────────────── */}
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <EyeOff size={16} className="text-purple-400" />
+            <h3 className="text-white font-bold">App Visibility</h3>
+            {device && (
+              <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${
+                device.appHidden
+                  ? 'bg-purple-900/40 text-purple-300 border border-purple-700/40'
+                  : 'bg-green-900/40 text-green-300 border border-green-700/40'
+              }`}>
+                {device.appHidden ? 'Hidden' : 'Visible'}
+              </span>
+            )}
+          </div>
+          <p className="text-gray-500 text-xs mb-4">
+            Hide or show the ParentGard icon on the child&apos;s launcher. The tracking service keeps
+            running even when the icon is hidden.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => send('hide_app')}
+              disabled={isBusy}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white font-bold text-sm transition-all active:scale-95">
+              {busy === 'hide_app' ? <Loader size={16} className="animate-spin" /> : <EyeOff size={16} />}
+              Hide Icon
+            </button>
+            <button
+              onClick={() => send('show_app')}
+              disabled={isBusy}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-bold text-sm transition-all active:scale-95">
+              {busy === 'show_app' ? <Loader size={16} className="animate-spin" /> : <Eye size={16} />}
+              Show Icon
+            </button>
+          </div>
+        </div>
 
         {/* ── Lock Device ──────────────────────────────────────────────── */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">

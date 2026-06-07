@@ -36,7 +36,6 @@ interface PaymentRecord {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-const RZP_KEY = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? 'rzp_test_SrD9RqGOrFNN3c';
 
 const FEATURE_LIST: [keyof Features, string, string][] = [
   ['location',        'Location Tracking',   'Real-time GPS tracking'],
@@ -77,13 +76,13 @@ declare global {
 }
 
 function openRazorpayCheckout(opts: {
-  orderId: string; amount: number; currency: string;
+  keyId: string; orderId: string; amount: number; currency: string;
   planName: string; userName: string; userEmail: string;
   onSuccess: (resp: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => void;
   onDismiss: () => void;
 }) {
   const rzp = new window.Razorpay({
-    key:         RZP_KEY,
+    key:         opts.keyId,
     order_id:    opts.orderId,
     amount:      opts.amount,
     currency:    opts.currency,
@@ -158,6 +157,7 @@ export default function SubscriptionPage() {
 
       // 2. Open Razorpay checkout
       openRazorpayCheckout({
+        keyId:     data.keyId,
         orderId:   data.orderId,
         amount:    data.amount,
         currency:  data.currency,

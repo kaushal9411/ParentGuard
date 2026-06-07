@@ -75,10 +75,16 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage>
   // ── Data loading ────────────────────────────────────────────────────────────
 
   Future<void> _fetchSubscriptionAndCheckPerms() async {
-    final sub = await SubscriptionService.fetch();
+    SubscriptionInfo? sub;
+    try {
+      sub = await SubscriptionService.fetch();
+    } catch (_) {}
     if (!mounted) return;
-    setState(() => _subscription = sub);
-    await _showPermissionModalIfNeeded(sub.features);
+    if (sub != null) setState(() => _subscription = sub);
+    // Show permission modal even if subscription fetch failed — use
+    // whatever features we have (defaults to all-false if sub is null).
+    await _showPermissionModalIfNeeded(
+        sub?.features ?? const SubscriptionFeatures());
   }
 
   Future<void> _showPermissionModalIfNeeded(
@@ -130,6 +136,10 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage>
       BackgroundWorker.captureAllAndSync();
     }
     await _checkServiceStatus();
+  }
+
+  Future<void> _hideApp() async {
+    await LauncherChannel.hideApp();
   }
 
   // ── Dialogs ─────────────────────────────────────────────────────────────────
@@ -257,6 +267,34 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage>
       backgroundColor: const Color(0xFF6C63FF),
       elevation: 0,
       actions: [
+        Padding(
+          padding: const EdgeInsets.only(right: 4.0),
+          child: Tooltip(
+            message: 'Hide App',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: _hideApp,
+                customBorder: const CircleBorder(),
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
+                    padding: const EdgeInsets.all(8),
+                    child: const Icon(
+                      Icons.visibility_off_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
         Padding(
           padding: const EdgeInsets.only(right: 8.0),
           child: _PremiumLogoutButton(

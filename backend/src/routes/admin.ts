@@ -549,8 +549,8 @@ router.patch('/geofences/:geofenceId', authenticate, requireAdmin, async (req, r
 
 // ── POST /api/admin/devices/:deviceId/app-blocks ──────────────────────────────
 router.post('/devices/:deviceId/app-blocks', authenticate, requireAdmin, async (req, res) => {
-  const { packageName, appName, isBlocked = true } = req.body as {
-    packageName: string; appName: string; isBlocked?: boolean;
+  const { packageName, appName, isBlocked = true, ruleType = 'block' } = req.body as {
+    packageName: string; appName: string; isBlocked?: boolean; ruleType?: string;
   };
   if (!packageName || !appName) {
     res.status(400).json({ error: 'packageName and appName required' }); return;
@@ -559,10 +559,10 @@ router.post('/devices/:deviceId/app-blocks', authenticate, requireAdmin, async (
   const device = await prisma.device.findUnique({ where: { deviceId: req.params.deviceId as string } });
   if (!device) { res.status(404).json({ error: 'Device not found' }); return; }
 
-  const rule = await prisma.appBlockRule.upsert({
+  const rule = await (prisma.appBlockRule as any).upsert({
     where:  { deviceId_packageName: { deviceId: device.deviceId, packageName } },
-    update: { isBlocked, appName },
-    create: { deviceId: device.deviceId, packageName, appName, isBlocked },
+    update: { isBlocked, appName, ruleType },
+    create: { deviceId: device.deviceId, packageName, appName, isBlocked, ruleType },
   });
   res.status(201).json(rule);
 });

@@ -9,6 +9,8 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import java.util.UUID
+import java.net.HttpURLConnection
+import java.net.URL
 
 class BrowsingHistoryService(private val ctx: Context) {
 
@@ -168,11 +170,69 @@ class BrowsingHistoryService(private val ctx: Context) {
         ctx.packageManager.getPackageInfo(pkg, 0); true
     } catch (_: Exception) { false }
 
+    /** Uploads new browsing history entries to /api/events/batch. */
+    fun syncBrowsingHistory(token: String, deviceId: String, baseUrl: String) {
+        val prefs   = ctx.getSharedPreferences(PREFS_BROWSING, Context.MODE_PRIVATE)
+        val sinceMs = prefs.getLong(KEY_LAST_BROWSING, 0L)
+        android.util.Log.d(TAG, "Syncing browsing history since epoch $sinceMs …")
+
+        val entries = try { JSONArray(getBrowsingHistory(sinceMs)) } catch (_: Exception) { return }
+        if (entries.length() == 0) {
+            android.util.Log.d(TAG, "No new browsing history since last sync")
+            return
+        }
+        android.util.Log.d(TAG, "Found ${entries.length()} browsing entries — uploading …")
+
+        var latestTs = sinceMs
+        val events   = JSONArray()
+        for (i in 0 until entries.length()) {
+            val e  = entries.getJSONObject(i)
+            val ts = e.optLong("visitedAtMs", 0L)
+            if (ts > latestTs) latestTs = ts
+            events.put(JSONObject().apply {
+                put("id",      "${deviceId}_browse_${e.optString("id")}")
+                put("type",    "browsingHistory")
+                put("payload", e)
+            })
+        }
+
+        val body = JSONObject().apply {
+            put("deviceId", deviceId)
+            put("events",   events)
+        }.toString().toByteArray(Charsets.UTF_8)
+
+        try {
+            val conn = (URL("$baseUrl/api/events/batch").openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Authorization", "Bearer $token")
+                setRequestProperty("Content-Type",  "application/json")
+                doOutput       = true
+                connectTimeout = 15_000
+                readTimeout    = 30_000
+                setFixedLengthStreamingMode(body.size.toLong())
+            }
+            conn.outputStream.use { it.write(body) }
+            val code = conn.responseCode
+            conn.disconnect()
+            if (code == 200 || code == 201) {
+                prefs.edit().putLong(KEY_LAST_BROWSING, latestTs).apply()
+                android.util.Log.d(TAG, "Synced ${entries.length()} browsing entries ✓")
+            } else {
+                android.util.Log.w(TAG, "Browsing history sync HTTP $code")
+            }
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "Browsing history sync failed: ${e.message}")
+        }
+    }
+
     companion object {
         const val QUEUE_PREFS = "pm_browsing_queue"
         const val QUEUE_KEY   = "url_entries"
         const val MAX_QUEUE   = 2000
-        private const val PER_SOURCE = 500
-        private const val MAX_TOTAL  = 1000
+        private const val PER_SOURCE    = 500
+        private const val MAX_TOTAL     = 1000
+        private const val TAG           = "BrowsingHistoryService"
+        private const val PREFS_BROWSING    = "pm_browsing"
+        private const val KEY_LAST_BROWSING = "last_browsing_ts"
     }
 }

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(npm install *)",
       "Bash(mkdir -p \"c:/xampp/htdocs/parental_monitor/admin_web/src/app/admin/users/[userId]/remote/[deviceId]\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(PGPASSWORD=postgres psql -U postgres -d parental_monitor -c \"SELECT column_name FROM information_schema.columns WHERE table_name='devices' AND column_name='app_hidden';\")"
     ],
     "additionalDirectories": [
       "c:\\xampp\\htdocs\\parental_monitor\\admin_web\\src\\app\\admin\\users\\[userId]\\remote"

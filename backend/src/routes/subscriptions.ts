@@ -306,14 +306,21 @@ router.post('/create-order', authenticate, async (req, res) => {
 
   const user = await prisma.user.findUnique({ where: { id: req.auth.userId }, select: { name: true, email: true } });
 
-  const order = await razorpay.orders.create({
-    amount:   Math.round(plan.price * 100),   // Razorpay expects paise
-    currency: 'INR',
-    receipt:  `sub_${req.auth.userId.slice(0, 8)}_${Date.now()}`,
-    notes:    { userId: req.auth.userId, planId },
-  });
+  let order;
+  try {
+    order = await razorpay.orders.create({
+      amount:   Math.round(plan.price * 100),
+      currency: 'INR',
+      receipt:  `sub_${req.auth.userId.slice(0, 8)}_${Date.now()}`,
+      notes:    { userId: req.auth.userId, planId },
+    });
+  } catch (err: unknown) {
+    const msg = (err as { error?: { description?: string } })?.error?.description ?? 'Failed to create payment order';
+    console.error('[Razorpay] create-order error:', err);
+    res.status(502).json({ error: msg });
+    return;
+  }
 
-  // Store pending payment record
   await prisma.payment.create({
     data: {
       userId:           req.auth.userId,
@@ -326,12 +333,12 @@ router.post('/create-order', authenticate, async (req, res) => {
   });
 
   res.json({
-    orderId:  order.id,
-    amount:   order.amount,
-    currency: order.currency,
-    keyId:    RAZORPAY_KEY_ID,
-    planName: plan.name,
-    userName: user?.name ?? '',
+    orderId:   order.id,
+    amount:    order.amount,
+    currency:  order.currency,
+    keyId:     RAZORPAY_KEY_ID,
+    planName:  plan.name,
+    userName:  user?.name ?? '',
     userEmail: user?.email ?? '',
   });
 });
@@ -408,21 +415,29 @@ router.post('/admin/payment-link', authenticate, requireAdmin, async (req, res) 
   if (!plan) { res.status(404).json({ error: 'Plan not found' }); return; }
   if (plan.price <= 0) { res.status(400).json({ error: 'Free plan has no payment' }); return; }
 
-  const paymentLink = await (razorpay.paymentLink as any).create({
-    amount:      Math.round(plan.price * 100),
-    currency:    'INR',
-    description: description ?? `ParentGuard ${plan.name} Plan — ${plan.durationDays} days`,
-    customer:    {
-      name:    user.name,
-      email:   user.email,
-      ...(phone ? { contact: phone.startsWith('+') ? phone : `+91${phone}` } : {}),
-    },
-    notify: { sms: !!phone, email: true },
-    reminder_enable: true,
-    callback_url: `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/dashboard/subscription?payment=success`,
-    callback_method: 'get',
-    notes: { userId, planId, adminId: req.auth.userId },
-  });
+  let paymentLink;
+  try {
+    paymentLink = await (razorpay.paymentLink as any).create({
+      amount:      Math.round(plan.price * 100),
+      currency:    'INR',
+      description: description ?? `ParentGuard ${plan.name} Plan — ${plan.durationDays} days`,
+      customer:    {
+        name:    user.name,
+        email:   user.email,
+        ...(phone ? { contact: phone.startsWith('+') ? phone : `+91${phone}` } : {}),
+      },
+      notify: { sms: !!phone, email: true },
+      reminder_enable: true,
+      callback_url: `${process.env.FRONTEND_URL ?? 'http://localhost:3001'}/dashboard/subscription?payment=success`,
+      callback_method: 'get',
+      notes: { userId, planId, adminId: req.auth.userId },
+    });
+  } catch (err: unknown) {
+    const msg = (err as { error?: { description?: string } })?.error?.description ?? 'Failed to create payment link';
+    console.error('[Razorpay] payment-link error:', err);
+    res.status(502).json({ error: msg });
+    return;
+  }
 
   // Store payment record
   await prisma.payment.create({

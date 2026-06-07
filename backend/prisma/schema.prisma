@@ -145,6 +145,7 @@ model Device {
   lastSeen     DateTime?  @map("last_seen")
   ipAddress    String?    @map("ip_address")
   registeredAt DateTime   @default(now()) @map("registered_at")
+  appHidden    Boolean    @default(false) @map("app_hidden")
 
   locationLogs     LocationLog[]
   appUsageLogs     AppUsageLog[]
@@ -426,6 +427,7 @@ model AppBlockRule {
   packageName String   @map("package_name")
   appName     String   @map("app_name")
   isBlocked   Boolean  @default(true) @map("is_blocked")
+  ruleType    String   @default("block") @map("rule_type")  // block | hide
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@unique([deviceId, packageName])

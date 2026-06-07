@@ -87,8 +87,8 @@ setInterval(autoExpireSubscriptions, 60 * 60 * 1000);
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT ?? 3000);
-httpServer.listen(PORT, () => {
-  console.log(`✓ Parental Monitor API  →  http://localhost:${PORT}`);
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`✓ Parental Monitor API  →  http://0.0.0.0:${PORT}  (LAN reachable)`);
   console.log(`✓ Auth strategy         →  Passport JWT + Local`);
   console.log(`✓ Database              →  PostgreSQL via Prisma`);
 });

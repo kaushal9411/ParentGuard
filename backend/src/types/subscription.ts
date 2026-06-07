@@ -25,8 +25,8 @@ export const FREE_FEATURES: SubscriptionFeatures = {
   gallery:         false,
   browsingHistory: false,
   geofencing:      false,
-  appBlocking:     false,
-  remoteCommands:  false,
+  appBlocking:     true,
+  remoteCommands:  true,
   historyDays:     7,
 };
 

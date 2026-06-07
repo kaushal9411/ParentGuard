@@ -8,6 +8,7 @@ class AppConstants {
   static const String locationTaskName     = 'pm_location_task';
   static const String usageTaskName        = 'pm_usage_task';
   static const String deviceStatusTaskName = 'pm_device_status_task';
+  static const String fullSyncTaskName     = 'pm_full_sync_task';
 
   // ── Intervals ─────────────────────────────────────────────────────────────
   static const int locationIntervalMinutes = 5;
@@ -30,12 +31,12 @@ class AppConstants {
 
   // ── Backend ───────────────────────────────────────────────────────────────
   // Controlled via --dart-define=BACKEND_URL=<url> at build/run time.
-  // VS Code launch.json has two presets: "Emulator" and "Device".
-  // Emulator loopback : http://10.0.2.2:3000
-  // Physical device   : http://172.20.10.2:3000  (your PC's WiFi IP)
+  // USB + adb reverse tcp:3000 tcp:3000  → http://localhost:3000  (default)
+  // Emulator loopback                    → http://10.0.2.2:3000
+  // WiFi (no USB)                        → http://<PC-LAN-IP>:3000
   static const String backendBaseUrl = String.fromEnvironment(
     'BACKEND_URL',
-    defaultValue: 'http://172.20.10.2:3000',
+    defaultValue: 'http://localhost:3000',
   );
 
   // ── Data retention (days) ─────────────────────────────────────────────────

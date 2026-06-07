@@ -134,8 +134,8 @@ export const adminApi = {
     adminAxios.delete(`/api/admin/geofences/${geofenceId}`),
 
   // ── App block rules ──────────────────────────────────────────────────────
-  setAppBlock: (deviceId: string, packageName: string, appName: string, isBlocked: boolean) =>
-    adminAxios.post(`/api/admin/devices/${deviceId}/app-blocks`, { packageName, appName, isBlocked }),
+  setAppBlock: (deviceId: string, packageName: string, appName: string, isBlocked: boolean, ruleType: 'block' | 'hide' = 'block') =>
+    adminAxios.post(`/api/admin/devices/${deviceId}/app-blocks`, { packageName, appName, isBlocked, ruleType }),
 
   deviceAppBlocks: (deviceId: string) =>
     adminAxios.get(`/api/admin/devices/${deviceId}/app-blocks`),

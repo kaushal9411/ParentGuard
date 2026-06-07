@@ -1,19 +1,43 @@
 'use client';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { isAdminLoggedIn, getAdminToken } from '@/lib/adminAuth';
 import AdminSidebar from '@/components/AdminSidebar';
 import RouteLoader from '@/components/RouteLoader';
-import { Toaster } from 'sonner';
-import { Bell, X, Wifi } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
+import { Bell, X, Wifi, RefreshCw } from 'lucide-react';
+import { adminApi } from '@/lib/adminApi';
 
 interface LiveAlert { deviceName: string; userId: string; source: 'ws' | 'fcm'; }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router   = useRouter();
   const pathname = usePathname();
-  const [alert, setAlert]     = useState<LiveAlert | null>(null);
-  const [wsLive, setWsLive]   = useState(false);   // Soketi connected indicator
+  const [alert,        setAlert]        = useState<LiveAlert | null>(null);
+  const [wsLive,       setWsLive]       = useState(false);
+  const [adminSyncing, setAdminSyncing] = useState(false);
+  const [adminLastSync, setAdminLastSync] = useState<Date | null>(null);
+
+  // Extract deviceId when on a device-specific admin page
+  // Matches: /admin/users/<userId>/remote/<deviceId>/...
+  const deviceMatch = pathname.match(/\/admin\/users\/([^/]+)\/remote\/([^/]+)/);
+  const adminDeviceId = deviceMatch ? deviceMatch[2] : null;
+
+  // ── Sync device data ──────────────────────────────────────────────────────
+  const syncAdminDevice = useCallback(async () => {
+    if (!adminDeviceId || adminSyncing) return;
+    setAdminSyncing(true);
+    try {
+      await adminApi.issueCommand(adminDeviceId, 'sync_now');
+      toast.success('Syncing device… data will refresh in ~12 seconds', { duration: 12000 });
+      await new Promise(r => setTimeout(r, 12000));
+      setAdminLastSync(new Date());
+      window.location.reload();
+    } catch {
+      toast.error('Sync failed — is the device online?');
+      setAdminSyncing(false);
+    }
+  }, [adminDeviceId, adminSyncing]);
 
   // ── Helper: show alert + dispatch re-fetch event ──────────────────────────
   const showAlert = useCallback((deviceName: string, userId: string, deviceId: string, source: 'ws' | 'fcm') => {
@@ -133,6 +157,26 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </button>
           </div>
         )}
+
+        {/* Sync bar — always visible; button activates when on a device page */}
+        <div className="flex items-center justify-between bg-gray-900 border-b border-gray-800/60 px-6 py-2">
+          <span className="text-xs text-gray-500">
+            {adminDeviceId
+              ? <>Device: <span className="text-gray-400 font-mono">{adminDeviceId.slice(0, 12)}…</span>
+                  {adminLastSync && <span className="ml-2 text-gray-600">· Last synced {adminLastSync.toLocaleTimeString()}</span>}
+                </>
+              : 'Open a device page to sync'
+            }
+          </span>
+          <button
+            onClick={syncAdminDevice}
+            disabled={adminSyncing || !adminDeviceId}
+            title={!adminDeviceId ? 'Open a device page first' : 'Pull fresh data from this device'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 text-white text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95">
+            <RefreshCw size={11} className={adminSyncing ? 'animate-spin' : ''} />
+            {adminSyncing ? 'Syncing…' : 'Sync Device'}
+          </button>
+        </div>
 
         {children}
 

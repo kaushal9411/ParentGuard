@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Shield, Loader, CheckCircle, AlertCircle, Wifi, WifiOff, RefreshCw,
-  Lock, Ban, ShieldOff, Trash2,
+  Lock, Ban, ShieldOff, Trash2, EyeOff, Eye,
 } from 'lucide-react';
 import Header from '@/components/Header';
 import { devicesApi, userCommandsApi, userAppBlocksApi } from '@/lib/api';
@@ -107,7 +107,7 @@ export default function RemoteQuickPage() {
       const r = await userCommandsApi.list(selected);
       setCommands(
         (r.data as Cmd[]).filter((c) =>
-          ['lock_device', 'block_app', 'unblock_app'].includes(c.commandType)
+          ['lock_device', 'block_app', 'unblock_app', 'hide_app', 'show_app'].includes(c.commandType)
         )
       );
     } catch {}
@@ -121,16 +121,23 @@ export default function RemoteQuickPage() {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [selected, fetchCommands, fetchBlocks]);
 
-  async function lockDevice() {
+  async function sendCmd(type: string, payload?: Record<string, unknown>) {
     if (!selected) return;
-    setBusy('lock_device');
+    setBusy(type);
     try {
-      await userCommandsApi.issue(selected, 'lock_device');
+      await userCommandsApi.issue(selected, type, payload);
       await fetchCommands();
-      toast.success('Lock command sent');
+      const msgs: Record<string, string> = {
+        lock_device: 'Lock command sent',
+        hide_app: 'Hide command sent — icon will disappear within 10 seconds',
+        show_app: 'Show command sent — icon will reappear within 10 seconds',
+      };
+      toast.success(msgs[type] ?? 'Command sent');
     } catch { toast.error('Failed to send command'); }
     finally { setBusy(null); }
   }
+
+  async function lockDevice() { return sendCmd('lock_device'); }
 
   async function blockApp() {
     const pkg = pkgInput.trim();
@@ -198,6 +205,39 @@ export default function RemoteQuickPage() {
             )}
             <button onClick={() => Promise.all([fetchCommands(), fetchBlocks()])}
               className="ml-auto text-gray-400 hover:text-primary"><RefreshCw size={15} /></button>
+          </div>
+        </div>
+
+        {/* ── App Visibility ────────────────────────────────────────────────── */}
+        <div className="card space-y-3">
+          <div className="flex items-center gap-2">
+            <EyeOff size={16} className="text-purple-500" />
+            <h3 className="font-semibold text-gray-800">App Visibility</h3>
+            {device && (
+              <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-full ${
+                (device as Device & { appHidden?: boolean }).appHidden
+                  ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                  : 'bg-green-100 text-green-700 border border-green-200'
+              }`}>
+                {(device as Device & { appHidden?: boolean }).appHidden ? 'Hidden' : 'Visible'}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400">
+            Remotely hide or show the ParentGard icon on your child&apos;s device. Tracking continues
+            even when the icon is hidden.
+          </p>
+          <div className="flex gap-2">
+            <button onClick={() => sendCmd('hide_app')} disabled={isBusy || !selected}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-md">
+              {busy === 'hide_app' ? <Loader size={16} className="animate-spin" /> : <EyeOff size={16} />}
+              Hide Icon
+            </button>
+            <button onClick={() => sendCmd('show_app')} disabled={isBusy || !selected}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-md">
+              {busy === 'show_app' ? <Loader size={16} className="animate-spin" /> : <Eye size={16} />}
+              Show Icon
+            </button>
           </div>
         </div>
 
