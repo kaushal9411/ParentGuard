@@ -60,22 +60,21 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                 // Clear DPM camera policy if we are Device Owner (Samsung Knox may set it).
                 clearMediaRestrictions()
 
-                // Re-enable the package if hidden so the Samsung camera HAL sees it as active.
-                // Android 10+ silently drops startActivity() from background — capture directly
-                // in the foreground service instead of delegating to an Activity.
+                // On Samsung: package is disabled for icon hiding — re-enable it before camera.
+                // On other OEMs: only the LauncherAlias is disabled; package stays enabled.
                 val pm = ctx.packageManager
-                val wasHidden = pm.getApplicationEnabledSetting(ctx.packageName) ==
+                val wasHidden = isSamsungDevice() &&
+                    pm.getApplicationEnabledSetting(ctx.packageName) ==
                     android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
                 if (wasHidden) {
-                    android.util.Log.d(TAG, "capture_photo: re-enabling package — waiting for Samsung HAL cache flush")
+                    android.util.Log.d(TAG, "capture_photo: Samsung — re-enabling package for camera HAL")
                     pm.setApplicationEnabledSetting(ctx.packageName,
                         android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                         android.content.pm.PackageManager.DONT_KILL_APP)
-                    Thread.sleep(2500)  // Samsung camera HAL caches package state; needs ~2s to flush
+                    Thread.sleep(2500)
                 }
 
                 var result = capturePhoto(facing)
-                // Samsung HAL sometimes needs a second attempt after package re-enable
                 if (wasHidden && result.contains("CAMERA_DISABLED")) {
                     android.util.Log.w(TAG, "capture_photo: CAMERA_DISABLED on first try, retrying after 1.5s")
                     Thread.sleep(1500)
@@ -92,14 +91,15 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                 clearMediaRestrictions()
                 // Accessibility service dies when package is hidden; re-enable so it can reconnect.
                 val pm2 = ctx.packageManager
-                val wasHidden2 = pm2.getApplicationEnabledSetting(ctx.packageName) ==
+                val wasHidden2 = isSamsungDevice() &&
+                    pm2.getApplicationEnabledSetting(ctx.packageName) ==
                     android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
                 if (wasHidden2) {
-                    android.util.Log.d(TAG, "take_screenshot: re-enabling package so accessibility service reconnects")
+                    android.util.Log.d(TAG, "take_screenshot: Samsung — re-enabling package so accessibility service reconnects")
                     pm2.setApplicationEnabledSetting(ctx.packageName,
                         android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                         android.content.pm.PackageManager.DONT_KILL_APP)
-                    Thread.sleep(2500)  // accessibility service needs time to reconnect after package re-enable
+                    Thread.sleep(2500)
                 }
                 val ssResult = takeScreenshot()
                 android.util.Log.d(TAG, "take_screenshot result: ${ssResult.take(80)}")
@@ -729,31 +729,27 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         val pkg = packageName.takeIf { it.isNotBlank() } ?: ctx.packageName
         return if (pkg == ctx.packageName) {
             val pm = ctx.packageManager
-
-            // Step 1: Disable the application at package level.
-            // Samsung One UI only hides the icon when the application itself is disabled
-            // (component-level alias disable is ignored visually by Samsung's launcher).
-            pm.setApplicationEnabledSetting(
-                ctx.packageName,
-                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                android.content.pm.PackageManager.DONT_KILL_APP
-            )
-
-            // Step 2: Explicitly re-enable every background component via setComponentEnabledSetting.
-            // On Android, component-level ENABLED overrides application-level DISABLED in
-            // PackageManager — so these components can start, restart after being killed, and
-            // fire after a device reboot. The icon stays hidden because Samsung's launcher
-            // checks the package-level state, not individual component states.
-            backgroundComponents().forEach { cls ->
-                try {
-                    pm.setComponentEnabledSetting(
-                        android.content.ComponentName(ctx, cls),
-                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                        android.content.pm.PackageManager.DONT_KILL_APP
-                    )
-                } catch (_: Exception) {}
+            if (isSamsungDevice()) {
+                // Samsung's launcher ignores activity-alias component disable — must disable
+                // the full package to hide the icon. Side-effect: camera HAL also blocks access.
+                pm.setApplicationEnabledSetting(ctx.packageName,
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP)
+                backgroundComponents().forEach { cls ->
+                    try {
+                        pm.setComponentEnabledSetting(android.content.ComponentName(ctx, cls),
+                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                            android.content.pm.PackageManager.DONT_KILL_APP)
+                    } catch (_: Exception) {}
+                }
+            } else {
+                // Non-Samsung: disable only the LauncherAlias component. The package stays
+                // enabled so camera / accessibility service / services keep working normally.
+                pm.setComponentEnabledSetting(
+                    android.content.ComponentName(ctx.packageName, LAUNCHER_ALIAS),
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP)
             }
-
             """{"type":"ok","message":"ParentGard icon hidden"}"""
         } else {
             hideOtherApp(pkg)
@@ -764,26 +760,23 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         val pkg = packageName.takeIf { it.isNotBlank() } ?: ctx.packageName
         return if (pkg == ctx.packageName) {
             val pm = ctx.packageManager
-
-            // Re-enable the application — icon reappears in launcher
-            pm.setApplicationEnabledSetting(
-                ctx.packageName,
-                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                android.content.pm.PackageManager.DONT_KILL_APP
-            )
-
-            // Reset all explicitly-enabled background components back to DEFAULT so they
-            // cleanly follow application-level state going forward.
-            backgroundComponents().forEach { cls ->
-                try {
-                    pm.setComponentEnabledSetting(
-                        android.content.ComponentName(ctx, cls),
-                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
-                        android.content.pm.PackageManager.DONT_KILL_APP
-                    )
-                } catch (_: Exception) {}
+            if (isSamsungDevice()) {
+                pm.setApplicationEnabledSetting(ctx.packageName,
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP)
+                backgroundComponents().forEach { cls ->
+                    try {
+                        pm.setComponentEnabledSetting(android.content.ComponentName(ctx, cls),
+                            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DEFAULT,
+                            android.content.pm.PackageManager.DONT_KILL_APP)
+                    } catch (_: Exception) {}
+                }
+            } else {
+                pm.setComponentEnabledSetting(
+                    android.content.ComponentName(ctx.packageName, LAUNCHER_ALIAS),
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    android.content.pm.PackageManager.DONT_KILL_APP)
             }
-
             """{"type":"ok","message":"ParentGard icon visible"}"""
         } else {
             showOtherApp(pkg)
@@ -978,17 +971,28 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
 
     private fun rehidePackage() {
         val pm = ctx.packageManager
-        pm.setApplicationEnabledSetting(ctx.packageName,
-            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-            android.content.pm.PackageManager.DONT_KILL_APP)
-        backgroundComponents().forEach { cls ->
-            try {
-                pm.setComponentEnabledSetting(android.content.ComponentName(ctx, cls),
-                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                    android.content.pm.PackageManager.DONT_KILL_APP)
-            } catch (_: Exception) {}
+        if (isSamsungDevice()) {
+            pm.setApplicationEnabledSetting(ctx.packageName,
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP)
+            backgroundComponents().forEach { cls ->
+                try {
+                    pm.setComponentEnabledSetting(android.content.ComponentName(ctx, cls),
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP)
+                } catch (_: Exception) {}
+            }
+        } else {
+            // Non-Samsung: package was never disabled; just ensure the alias is disabled.
+            pm.setComponentEnabledSetting(
+                android.content.ComponentName(ctx.packageName, LAUNCHER_ALIAS),
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP)
         }
     }
+
+    private fun isSamsungDevice() =
+        android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true)
 
     // ── HTTP helper ───────────────────────────────────────────────────────────
 
@@ -1011,5 +1015,6 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         const val PREFS_COMMANDS       = "pm_commands"
         const val KEY_GEOFENCES        = "geofence_zones"
         const val KEY_BLOCKED_APPS     = "blocked_apps"
+        const val LAUNCHER_ALIAS       = "com.parentalmonitor.child.LauncherAlias"
     }
 }

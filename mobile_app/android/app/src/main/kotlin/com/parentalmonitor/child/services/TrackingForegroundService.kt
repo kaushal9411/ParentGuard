@@ -67,6 +67,25 @@ class TrackingForegroundService : Service() {
         browsingHistSvc = BrowsingHistoryService(this)
         isRunning       = true
         clearDpmCameraPolicy()
+        migrateLauncherHide()
+    }
+
+    // On non-Samsung devices, switch from old package-level disable (breaks camera) to
+    // component-level LauncherAlias disable (icon hidden, package stays enabled).
+    private fun migrateLauncherHide() {
+        if (android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true)) return
+        val pm = packageManager
+        if (pm.getApplicationEnabledSetting(packageName) ==
+            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
+            android.util.Log.i(TAG, "Migrating icon-hide: re-enabling package, disabling LauncherAlias only")
+            pm.setApplicationEnabledSetting(packageName,
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP)
+            pm.setComponentEnabledSetting(
+                android.content.ComponentName(packageName, "com.parentalmonitor.child.LauncherAlias"),
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                android.content.pm.PackageManager.DONT_KILL_APP)
+        }
     }
 
     // Samsung Knox automatically sets camera/screenshot restrictions when the app registers

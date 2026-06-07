@@ -70,8 +70,14 @@ class MainActivity : FlutterActivity() {
 
     private fun isAppHidden(): Boolean {
         return try {
-            packageManager.getApplicationEnabledSetting(packageName) ==
+            if (android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
+                packageManager.getApplicationEnabledSetting(packageName) ==
                     PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            } else {
+                packageManager.getComponentEnabledSetting(
+                    android.content.ComponentName(packageName, "com.parentalmonitor.child.LauncherAlias")
+                ) == PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            }
         } catch (_: Exception) { false }
     }
 
