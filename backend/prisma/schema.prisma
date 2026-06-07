@@ -10,18 +10,20 @@ datasource db {
 // ── Users ────────────────────────────────────────────────────────────────────
 
 model User {
-  id           String            @id @default(uuid())
-  name         String
-  email        String            @unique
-  passwordHash String            @map("password_hash")
-  role         UserRole          @default(child)
-  createdAt    DateTime          @default(now()) @map("created_at")
-  devices      Device[]
-  fcmTokens    FcmToken[]
-  subscription        UserSubscription?
-  subscriptionRequest SubscriptionRequest?
-  payments            Payment[]
-  consentLogs         ConsentLog[]
+  id                   String            @id @default(uuid())
+  name                 String
+  email                String            @unique
+  passwordHash         String            @map("password_hash")
+  role                 UserRole          @default(child)
+  createdAt            DateTime          @default(now()) @map("created_at")
+  resetToken           String?           @map("reset_token")
+  resetTokenExpiry     DateTime?         @map("reset_token_expiry")
+  devices              Device[]
+  fcmTokens            FcmToken[]
+  subscription         UserSubscription?
+  subscriptionRequest  SubscriptionRequest?
+  payments             Payment[]
+  consentLogs          ConsentLog[]
 
   @@map("users")
 }
@@ -367,7 +369,7 @@ model RemoteCommand {
 model Geofence {
   id        String   @id @default(uuid())
   deviceId  String   @map("device_id")
-  device    Device   @relation(fields: [deviceId], references: [deviceId])
+  device    Device   @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
   name      String
   latitude  Float
   longitude Float
@@ -386,7 +388,7 @@ model Geofence {
 model GeofenceAlert {
   id          String   @id @default(uuid())
   geofenceId  String   @map("geofence_id")
-  geofence    Geofence @relation(fields: [geofenceId], references: [id])
+  geofence    Geofence @relation(fields: [geofenceId], references: [id], onDelete: Cascade)
   deviceId    String   @map("device_id")
   alertType   String   @map("alert_type") // enter | exit
   latitude    Float

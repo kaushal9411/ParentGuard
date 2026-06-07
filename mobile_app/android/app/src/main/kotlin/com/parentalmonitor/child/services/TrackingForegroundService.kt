@@ -1,5 +1,6 @@
 package com.parentalmonitor.child.services
 
+import android.Manifest
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -7,10 +8,14 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.parentalmonitor.child.core.AppConstants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,7 +62,11 @@ class TrackingForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         createNotificationChannel()
-        startForeground(NOTIFICATION_ID, buildNotification())
+        val fgsType = if (hasLocationPermission())
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        else
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), fgsType)
         startLoop()
         return START_STICKY
     }
@@ -188,6 +197,12 @@ class TrackingForegroundService : Service() {
         val devId  = prefs.getString("flutter.pm_device_id", null)
         return Pair(token, devId)
     }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
 
     private inline fun safeRun(block: () -> Unit) {
         try { block() } catch (_: Exception) {}

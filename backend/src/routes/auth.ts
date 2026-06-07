@@ -3,12 +3,24 @@ import passport from 'passport';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
 import { prisma } from '../config/database';
 
 const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev_secret';
 const JWT_EXPIRES = '30d';
+const APP_URL = process.env.APP_URL ?? 'http://localhost:3001';
+
+function createMailTransport() {
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST ?? 'smtp.gmail.com',
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: false,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+}
 
 function signToken(userId: string, role: string): string {
   return jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
@@ -202,5 +214,85 @@ router.get(
     )(req, res, next);
   },
 );
+
+// ── POST /api/auth/forgot-password ───────────────────────────────────────────
+
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  const { email } = req.body as { email?: string };
+  if (!email) { res.status(400).json({ error: 'Email is required' }); return; }
+
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
+
+  // Always return 200 to prevent email enumeration
+  if (!user) { res.json({ ok: true }); return; }
+
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { resetToken: token, resetTokenExpiry: expiry },
+  });
+
+  const resetUrl = `${APP_URL}/auth/reset-password?token=${token}`;
+
+  try {
+    const transport = createMailTransport();
+    await transport.sendMail({
+      from: process.env.SMTP_FROM ?? 'ParentGard <noreply@parentgard.com>',
+      to: user.email,
+      subject: 'Reset your ParentGard password',
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:auto">
+          <h2 style="color:#1A3A8F">Reset your password</h2>
+          <p>Hi ${user.name},</p>
+          <p>Click the button below to reset your password. This link expires in <strong>1 hour</strong>.</p>
+          <a href="${resetUrl}" style="display:inline-block;background:#1A3A8F;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;margin:16px 0">
+            Reset Password
+          </a>
+          <p style="color:#888;font-size:13px">If you didn't request this, ignore this email.</p>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error('Email send failed:', err);
+  }
+
+  res.json({ ok: true });
+});
+
+// ── POST /api/auth/reset-password ────────────────────────────────────────────
+
+router.post('/reset-password', async (req: Request, res: Response) => {
+  const { token, password } = req.body as { token?: string; password?: string };
+  if (!token || !password) {
+    res.status(400).json({ error: 'Token and password are required' });
+    return;
+  }
+  if (password.length < 6) {
+    res.status(400).json({ error: 'Password must be at least 6 characters' });
+    return;
+  }
+
+  const user = await prisma.user.findFirst({
+    where: {
+      resetToken: token,
+      resetTokenExpiry: { gt: new Date() },
+    },
+  });
+
+  if (!user) {
+    res.status(400).json({ error: 'Invalid or expired reset link' });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, resetToken: null, resetTokenExpiry: null },
+  });
+
+  res.json({ ok: true });
+});
 
 export default router;

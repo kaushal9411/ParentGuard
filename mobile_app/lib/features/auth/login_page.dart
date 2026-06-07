@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'auth_widgets.dart';
+import 'forgot_password_page.dart';
 import 'register_page.dart';
 import '../tracking/tracking_home_page.dart';
 import '../../core/constants/app_constants.dart';
@@ -118,7 +119,7 @@ class _LoginPageState extends State<LoginPage> {
                 Text(
                   'Sign in to your account',
                   style: TextStyle(
-                      color: Colors.white.withOpacity(0.75), fontSize: 14),
+                      color: Colors.white.withValues(alpha: 0.75), fontSize: 14),
                 ),
 
                 const SizedBox(height: 32),
@@ -182,7 +183,10 @@ class _LoginPageState extends State<LoginPage> {
                           Align(
                             alignment: Alignment.centerRight,
                             child: TextButton(
-                              onPressed: () {},
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
+                              ),
                               child: const Text(
                                 'Forgot Password?',
                                 style: TextStyle(
@@ -230,7 +234,7 @@ class _LoginPageState extends State<LoginPage> {
                                 foregroundColor: Colors.white,
                                 elevation: 3,
                                 shadowColor:
-                                    const Color(0xFF1A3A8F).withOpacity(0.4),
+                                    const Color(0xFF1A3A8F).withValues(alpha: 0.4),
                                 shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14)),
                               ),

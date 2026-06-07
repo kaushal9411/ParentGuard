@@ -158,7 +158,7 @@
             android:name=".services.TrackingForegroundService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="location|dataSync|camera|microphone" />
+            android:foregroundServiceType="location|dataSync" />
 
         <!-- ── Boot / update receiver ────────────────────────────────── -->
         <receiver

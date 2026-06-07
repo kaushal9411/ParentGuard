@@ -121,9 +121,9 @@ export default function LoginPage() {
             </div>
 
             <div className="flex justify-end">
-              <button type="button" className="text-sm text-primary font-medium hover:underline">
+              <Link href="/auth/forgot-password" className="text-sm text-primary font-medium hover:underline">
                 Forgot password?
-              </button>
+              </Link>
             </div>
 
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-3">

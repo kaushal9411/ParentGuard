@@ -109,6 +109,26 @@ class AuthService {
     }
   }
 
+  // ── Forgot password ─────────────────────────────────────────────────────────
+
+  Future<void> forgotPassword({ required String email }) async {
+    try {
+      await _dio.post('/api/auth/forgot-password', data: { 'email': email });
+    } on DioException catch (e) {
+      throw SyncException(_extractError(e, 'Failed to send reset email'));
+    }
+  }
+
+  // ── Reset password ──────────────────────────────────────────────────────────
+
+  Future<void> resetPassword({ required String token, required String password }) async {
+    try {
+      await _dio.post('/api/auth/reset-password', data: { 'token': token, 'password': password });
+    } on DioException catch (e) {
+      throw SyncException(_extractError(e, 'Failed to reset password'));
+    }
+  }
+
   // ── Verify stored token is still valid ──────────────────────────────────────
 
   Future<bool> validateToken() async {

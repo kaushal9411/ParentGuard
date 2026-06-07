@@ -108,7 +108,7 @@ class _AppEntryPointState extends ConsumerState<AppEntryPoint> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_ready) {R
+    if (!_ready) {
       return const Scaffold(
         backgroundColor: Color(0xFF0F172A),
         body: Center(child: CircularProgressIndicator()),

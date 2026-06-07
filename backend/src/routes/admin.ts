@@ -429,6 +429,15 @@ router.delete('/devices/:deviceId', authenticate, requireAdmin, async (req, res)
   }
 
   await deleteGalleryFiles([deviceId]);
+
+  // Delete geofences (and their alerts via cascade) before deleting the device.
+  // The DB constraint is RESTRICT; we remove child rows explicitly here as a
+  // belt-and-suspenders guard until the schema migration (onDelete: Cascade) is applied.
+  await prisma.geofenceAlert.deleteMany({
+    where: { geofence: { deviceId } },
+  });
+  await prisma.geofence.deleteMany({ where: { deviceId } });
+
   await prisma.device.delete({ where: { deviceId } });
 
   res.json({ ok: true });
