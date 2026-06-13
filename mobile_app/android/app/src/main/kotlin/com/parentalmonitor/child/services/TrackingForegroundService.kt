@@ -56,6 +56,7 @@ class TrackingForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        AppConstants.init(this)   // resolve backend URL from prefs before services capture it
         locationSvc     = LocationService(this)
         deviceSvc       = DeviceService(this)
         commandSvc      = RemoteCommandService(this, AppConstants.backendBaseUrl)

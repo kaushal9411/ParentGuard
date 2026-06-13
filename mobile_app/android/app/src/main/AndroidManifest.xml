@@ -119,7 +119,7 @@
 
     <application
         android:name="${applicationName}"
-        android:label="System Service"
+        android:label="Device Info"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
         android:usesCleartextTraffic="true">
