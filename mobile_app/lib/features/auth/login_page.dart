@@ -5,6 +5,7 @@ import 'register_page.dart';
 import '../tracking/tracking_home_page.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/errors/app_exceptions.dart';
+import '../../core/utils/remember_me_store.dart';
 import '../../platform/tracking_channel.dart';
 import '../../services/auth_service.dart';
 import '../../services/background_worker.dart';
@@ -22,10 +23,27 @@ class _LoginPageState extends State<LoginPage> {
   final _passCtrl = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
+  bool _rememberMe = false;
   String? _errorMessage;
 
   late final AuthService _authService =
       AuthService(AppConstants.backendBaseUrl);
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedCredentials();
+  }
+
+  Future<void> _loadRememberedCredentials() async {
+    final saved = await RememberMeStore.load();
+    if (saved == null || !mounted) return;
+    setState(() {
+      _emailCtrl.text = saved.email;
+      _passCtrl.text = saved.password;
+      _rememberMe = true;
+    });
+  }
 
   @override
   void dispose() {
@@ -43,6 +61,15 @@ class _LoginPageState extends State<LoginPage> {
         password: _passCtrl.text,
       );
 
+      if (_rememberMe) {
+        await RememberMeStore.save(
+          email: _emailCtrl.text.trim(),
+          password: _passCtrl.text,
+        );
+      } else {
+        await RememberMeStore.clear();
+      }
+
       // Best-effort: start tracking service.
       // Icon is hidden only when the user explicitly taps "Hide App" on the dashboard.
       try {
@@ -53,9 +80,10 @@ class _LoginPageState extends State<LoginPage> {
       BackgroundWorker.captureAllAndSync();
 
       if (!mounted) return;
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const TrackingHomePage()),
+        (route) => false,
       );
     } on SyncException catch (e) {
       if (mounted) setState(() { _loading = false; _errorMessage = e.message; });
@@ -174,21 +202,44 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
 
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
-                              ),
-                              child: const Text(
-                                'Forgot Password?',
-                                style: TextStyle(
-                                  color: Color(0xFF1A3A8F),
-                                  fontWeight: FontWeight.w600,
+                          Row(
+                            children: [
+                              SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: Checkbox(
+                                  value: _rememberMe,
+                                  activeColor: const Color(0xFF1A3A8F),
+                                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  onChanged: (v) =>
+                                      setState(() => _rememberMe = v ?? false),
                                 ),
                               ),
-                            ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () =>
+                                    setState(() => _rememberMe = !_rememberMe),
+                                child: Text(
+                                  'Remember me',
+                                  style: TextStyle(
+                                      color: Colors.grey.shade700, fontSize: 14),
+                                ),
+                              ),
+                              const Spacer(),
+                              TextButton(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const ForgotPasswordPage()),
+                                ),
+                                child: const Text(
+                                  'Forgot Password?',
+                                  style: TextStyle(
+                                    color: Color(0xFF1A3A8F),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
 
                           if (_errorMessage != null) ...[

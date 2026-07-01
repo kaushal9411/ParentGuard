@@ -6,7 +6,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.UUID
 
 class CallLogService(private val ctx: Context) {
 
@@ -103,6 +102,7 @@ class CallLogService(private val ctx: Context) {
                 selArgs,
                 "${CallLog.Calls.DATE} DESC",
             )?.use { cursor ->
+                val idIdx     = cursor.getColumnIndexOrThrow(CallLog.Calls._ID)
                 val numberIdx = cursor.getColumnIndexOrThrow(CallLog.Calls.NUMBER)
                 val nameIdx   = cursor.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME)
                 val typeIdx   = cursor.getColumnIndexOrThrow(CallLog.Calls.TYPE)
@@ -119,7 +119,9 @@ class CallLogService(private val ctx: Context) {
                         else                        -> "missed"
                     }
                     result.put(JSONObject().apply {
-                        put("id",        UUID.randomUUID().toString())
+                        // Stable per-call MediaStore _ID → deterministic event id
+                        // so re-syncs upsert instead of creating duplicate rows.
+                        put("id",        cursor.getLong(idIdx).toString())
                         put("number",    cursor.getString(numberIdx) ?: "")
                         put("name",      cursor.getString(nameIdx))
                         put("type",      callType)

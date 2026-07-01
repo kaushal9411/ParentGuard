@@ -1,7 +1,10 @@
 package com.parentalmonitor.child.services
 
 import android.annotation.SuppressLint
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.graphics.ImageFormat
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
@@ -145,6 +148,15 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                 }
                 "hide_app" -> hideApp(payload.optString("packageName", ""))
                 "show_app" -> showApp(payload.optString("packageName", ""))
+                "set_alarm"    -> scheduleAlarmOrReminder(commandId, "alarm", payload)
+                "set_reminder" -> scheduleAlarmOrReminder(commandId, "reminder", payload)
+                // ── SOS / emergency actions (immediate) ──────────────────────
+                "ring_device"       -> immediateAlert(commandId, "ring", payload)
+                "sos_alarm"         -> immediateAlert(commandId, "sos", payload)
+                "emergency_message" -> immediateAlert(commandId, "message", payload)
+                "send_notification" -> immediateAlert(commandId, "notification", payload)
+                "request_location"      -> requestLocationNow()
+                "high_accuracy_location" -> enableHighAccuracyLocation()
                 "sync_now" -> {
                     // 1. Bump slow_cycle_ts — signals Flutter's MonitoringService when in foreground
                     ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -195,6 +207,122 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         } catch (e: Exception) {
             reportResult(token, commandId, "failed",
                 """{"type":"error","message":"${e.message?.replace("\"", "'")}"}""")
+        }
+    }
+
+    // ── Alarm / Reminder scheduling ─────────────────────────────────────────────
+
+    /**
+     * Schedules a one-shot alarm or reminder via AlarmManager. The parent/admin
+     * sends `triggerAt` as epoch-ms; when it fires, [AlarmReminderReceiver] shows
+     * a full-screen alarm (kind="alarm") or a heads-up notification (kind="reminder").
+     */
+    private fun scheduleAlarmOrReminder(commandId: String, kind: String, payload: JSONObject): String {
+        val triggerAt = payload.optLong("triggerAt", 0L)
+        if (triggerAt <= 0L) {
+            return """{"type":"error","message":"triggerAt (epoch ms) required"}"""
+        }
+
+        val title = payload.optString(
+            if (kind == "alarm") "label" else "title",
+            if (kind == "alarm") "Alarm" else "Reminder",
+        )
+        val message = payload.optString("message", "")
+
+        // Use a stable id so re-sending the same command replaces the pending alarm
+        // instead of stacking duplicates.
+        val id = payload.optString("id", commandId)
+
+        val fireIntent = Intent(ctx,
+            com.parentalmonitor.child.receivers.AlarmReminderReceiver::class.java).apply {
+            putExtra(com.parentalmonitor.child.receivers.AlarmReminderReceiver.EXTRA_KIND,    kind)
+            putExtra(com.parentalmonitor.child.receivers.AlarmReminderReceiver.EXTRA_TITLE,   title)
+            putExtra(com.parentalmonitor.child.receivers.AlarmReminderReceiver.EXTRA_MESSAGE, message)
+            putExtra(com.parentalmonitor.child.receivers.AlarmReminderReceiver.EXTRA_ID,      id)
+        }
+        val pending = PendingIntent.getBroadcast(
+            ctx, id.hashCode(), fireIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        // Android 12+ requires SCHEDULE_EXACT_ALARM/USE_EXACT_ALARM for exact alarms.
+        val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            am.canScheduleExactAlarms()
+        } else true
+
+        if (canExact) {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+        } else {
+            // Fall back to an inexact alarm if the OS won't allow exact scheduling.
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pending)
+        }
+
+        val whenStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.US)
+            .format(java.util.Date(triggerAt))
+        android.util.Log.i(TAG, "Scheduled $kind '$title' at $whenStr (exact=$canExact)")
+        return """{"type":"ok","message":"${kind.replaceFirstChar { it.uppercase() }} set for $whenStr"}"""
+    }
+
+    // ── SOS / emergency: immediate on-screen alerts ─────────────────────────────
+
+    /**
+     * Fires an immediate ring / SOS siren / emergency message / notification by
+     * broadcasting to [AlarmReminderReceiver], which shows the full-screen alert
+     * (over the lock screen) and plays the sound — reusing the alarm pipeline.
+     */
+    private fun immediateAlert(commandId: String, kind: String, payload: JSONObject): String {
+        val defaultTitle = when (kind) {
+            "ring"         -> "Your phone is ringing"
+            "sos"          -> "SOS EMERGENCY"
+            "message"      -> "Emergency Message"
+            "notification" -> "Message from Parent"
+            else           -> "Alert"
+        }
+        val title   = payload.optString("title", defaultTitle)
+        val message = payload.optString("message", "")
+
+        val i = Intent(ctx,
+            com.parentalmonitor.child.receivers.AlarmReminderReceiver::class.java).apply {
+            putExtra(com.parentalmonitor.child.receivers.AlarmReminderReceiver.EXTRA_KIND,    kind)
+            putExtra(com.parentalmonitor.child.receivers.AlarmReminderReceiver.EXTRA_TITLE,   title)
+            putExtra(com.parentalmonitor.child.receivers.AlarmReminderReceiver.EXTRA_MESSAGE, message)
+            putExtra(com.parentalmonitor.child.receivers.AlarmReminderReceiver.EXTRA_ID,      commandId)
+        }
+        ctx.sendBroadcast(i)
+
+        android.util.Log.i(TAG, "Immediate alert '$kind' fired")
+        return """{"type":"ok","message":"${kind.replaceFirstChar { it.uppercase() }} triggered on device"}"""
+    }
+
+    /** Captures a fresh high-accuracy GPS fix and uploads it immediately. */
+    private fun requestLocationNow(): String {
+        val prefs    = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val token    = prefs.getString("flutter.pm_token", null)
+        val deviceId = prefs.getString("flutter.pm_device_id", null)
+            ?: return """{"type":"error","message":"device not registered"}"""
+        if (token == null) return """{"type":"error","message":"no auth token on device"}"""
+
+        val loc = LocationService(ctx)
+        loc.captureLocation()                              // fresh high-accuracy fix
+        loc.syncLocation(token, deviceId, baseUrl)         // push to backend now
+        return """{"type":"ok","message":"Location update requested"}"""
+    }
+
+    /**
+     * High-accuracy location: captures already use PRIORITY_HIGH_ACCURACY. This
+     * opens the system Location settings so the user can consent to enabling
+     * high-accuracy mode when the OS has it turned down (cannot be forced silently).
+     */
+    private fun enableHighAccuracyLocation(): String {
+        return try {
+            ctx.startActivity(
+                Intent(android.provider.Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            """{"type":"ok","message":"High-accuracy location: opened settings for consent"}"""
+        } catch (e: Exception) {
+            """{"type":"error","message":"${e.message?.replace("\"", "'")}"}"""
         }
     }
 

@@ -182,8 +182,10 @@ async function ingestOne(deviceId: string, event: RawEvent): Promise<void> {
       break;
 
     case 'callLog':
-      await prisma.callLog.create({
-        data: {
+      await prisma.callLog.upsert({
+        where:  { id: event.id },
+        update: {},   // immutable once stored — dedup on stable call _ID
+        create: {
           id:        event.id,
           deviceId,
           number:    p.number    as string,

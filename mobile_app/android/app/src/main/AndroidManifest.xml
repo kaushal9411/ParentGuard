@@ -42,6 +42,12 @@
     <!-- Prevent CPU sleep during background location fix -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
+    <!-- ── Alarms & reminders (remotely scheduled) ──────────────────────────── -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- ── Battery optimisation ─────────────────────────────────────────── -->
     <!--
         Lets us request exemption from Doze / battery optimisation.
@@ -182,6 +188,22 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
+
+        <!-- ── Alarm / reminder trigger receiver (fires at scheduled time) ── -->
+        <receiver
+            android:name="com.parentalmonitor.child.receivers.AlarmReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
+        <!-- ── Full-screen ringing alarm activity ───────────────────────── -->
+        <activity
+            android:name="com.parentalmonitor.child.activities.AlarmActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleInstance"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
 
         <!-- ── Secret dial-code re-entry: *#*#94123#*#* re-reveals the app ── -->
         <receiver

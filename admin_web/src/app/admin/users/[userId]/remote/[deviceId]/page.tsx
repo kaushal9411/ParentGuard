@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Camera, Mic, FolderOpen, Shield,
-  Wifi, WifiOff, ChevronRight, Radio, Monitor, AppWindow, MapPin,
+  Wifi, WifiOff, ChevronRight, Radio, Monitor, AppWindow, MapPin, AlarmClock, Siren,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
@@ -74,6 +74,27 @@ const CARDS = [
     iconBg: 'bg-emerald-500/20',
     iconColor: 'text-emerald-400',
     types: ['list_apps'],
+  },
+  {
+    key: 'sos',
+    label: 'SOS & Emergency',
+    desc: 'Ring, lock, alarm, locate and message the device instantly',
+    icon: Siren,
+    gradient: 'from-red-600 to-rose-700',
+    iconBg: 'bg-red-500/20',
+    iconColor: 'text-red-400',
+    types: ['sos_alarm', 'ring_device', 'lock_device', 'request_location',
+            'high_accuracy_location', 'emergency_message', 'send_notification'],
+  },
+  {
+    key: 'alarm',
+    label: 'Alarms & Reminders',
+    desc: 'Schedule alarms and reminders on the device remotely',
+    icon: AlarmClock,
+    gradient: 'from-amber-600 to-orange-700',
+    iconBg: 'bg-amber-500/20',
+    iconColor: 'text-amber-400',
+    types: ['set_alarm', 'set_reminder'],
   },
   {
     key: 'geofencing',

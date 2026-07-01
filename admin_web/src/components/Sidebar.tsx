@@ -5,6 +5,7 @@ import {
   LayoutDashboard, Smartphone, MapPin, BarChart2, Bell, CreditCard, Download,
   LogOut, ChevronRight, ChevronLeft, ChevronDown, Image, Globe, Camera, Mic,
   FolderOpen, Zap, Map, Ban, MessageSquare, Monitor, AppWindow, Phone, Users,
+  AlarmClock, Siren,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { clearAuth } from '@/lib/auth';
@@ -42,6 +43,8 @@ const NAV: NavItem[] = [
       { href: '/dashboard/remote/screenshot', icon: Monitor,    label: 'Screenshot',      feature: 'remoteCommands' },
       { href: '/dashboard/remote/files',      icon: FolderOpen, label: 'File Browsing',   feature: 'remoteCommands' },
       { href: '/dashboard/remote/apps',       icon: AppWindow,  label: 'Installed Apps',  feature: 'remoteCommands' },
+      { href: '/dashboard/remote/sos',        icon: Siren,      label: 'SOS & Emergency', feature: 'remoteCommands' },
+      { href: '/dashboard/remote/alarm',      icon: AlarmClock, label: 'Alarms & Reminders', feature: 'remoteCommands' },
       { href: '/dashboard/remote/quick',      icon: Zap,        label: 'Quick Commands',  feature: 'remoteCommands' },
     ],
   },
@@ -163,14 +166,21 @@ export default function Sidebar() {
 
             return (
               <div key={href}>
-                <button onClick={() => setRemoteOpen((o) => !o)}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+                <div
+                  className={`w-full flex items-center gap-3 pl-3 pr-2 py-2.5 rounded-xl text-sm font-medium
                     transition-all duration-150 group
                     ${groupActive ? 'bg-primary-light/20 text-white' : 'text-blue-200 hover:bg-white/10 hover:text-white'}`}>
-                  <Icon size={18} className={groupActive ? 'text-primary-light' : 'text-blue-300 group-hover:text-white'} />
-                  <span className="flex-1 text-left whitespace-nowrap">{label}</span>
-                  <ChevronDown size={14} className={`text-blue-300 transition-transform duration-200 ${remoteOpen ? 'rotate-180' : ''}`} />
-                </button>
+                  {/* Label opens the Remote Access hub (cards) */}
+                  <Link href={href} onClick={() => setRemoteOpen(true)}
+                    className="flex items-center gap-3 flex-1 min-w-0">
+                    <Icon size={18} className={groupActive ? 'text-primary-light' : 'text-blue-300 group-hover:text-white'} />
+                    <span className="flex-1 text-left whitespace-nowrap">{label}</span>
+                  </Link>
+                  {/* Chevron toggles the submenu */}
+                  <button onClick={() => setRemoteOpen((o) => !o)} className="p-0.5" aria-label="Toggle submenu">
+                    <ChevronDown size={14} className={`text-blue-300 transition-transform duration-200 ${remoteOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
 
                 {remoteOpen && (
                   <div className="ml-4 mt-0.5 space-y-0.5 border-l border-white/10 pl-3">

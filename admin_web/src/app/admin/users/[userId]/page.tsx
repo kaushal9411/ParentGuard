@@ -22,7 +22,7 @@ import {
   Wifi, WifiOff, Clock, Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed,
   Contact as ContactIcon, Image, Video, Globe, Activity, Battery, Signal,
   Camera, Mic, Radio, Monitor, AppWindow, FolderOpen, Shield, Eye, Trash2,
-  ChevronDown, ChevronUp, ChevronRight, Search, MessageSquare,
+  ChevronDown, ChevronUp, ChevronRight, Search, MessageSquare, AlarmClock, Siren,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
@@ -1376,6 +1376,8 @@ function RemoteTab({ data, userId, selectedDeviceId, allDevices }: {
     : allDevices.filter((d) => d.role === 'child')[0] ?? null;
 
   const CARDS = [
+    { key: 'sos',        label: 'SOS & Emergency', desc: 'Ring, lock, alarm, locate and message the device instantly', icon: <Siren size={22} className="text-red-400" />,       iconBg: 'bg-red-500/20',     border: 'hover:border-red-700/50',     accent: 'from-red-600 to-rose-700' },
+    { key: 'alarm',      label: 'Alarms & Reminders', desc: 'Schedule alarms and reminders on the device remotely',   icon: <AlarmClock size={22} className="text-amber-400" />, iconBg: 'bg-amber-500/20',   border: 'hover:border-amber-700/50',   accent: 'from-amber-600 to-orange-700' },
     { key: 'camera',     label: 'Camera Capture',  desc: 'Silently capture photo from front or back camera',         icon: <Camera size={22} className="text-pink-400" />,     iconBg: 'bg-pink-500/20',    border: 'hover:border-pink-700/50',    accent: 'from-pink-600 to-rose-700' },
     { key: 'audio',      label: 'Audio Recording', desc: 'Start / stop ambient microphone recording',               icon: <Mic size={22} className="text-red-400" />,         iconBg: 'bg-red-500/20',     border: 'hover:border-red-700/50',     accent: 'from-red-600 to-orange-700' },
     { key: 'screenshot', label: 'Screenshot',      desc: 'Capture current screen via Accessibility Service (API 30+)', icon: <Monitor size={22} className="text-cyan-400" />,    iconBg: 'bg-cyan-500/20',    border: 'hover:border-cyan-700/50',    accent: 'from-cyan-600 to-teal-700' },
