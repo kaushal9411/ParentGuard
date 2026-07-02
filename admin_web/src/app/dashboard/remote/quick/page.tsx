@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Shield, Loader, CheckCircle, AlertCircle, Wifi, WifiOff, RefreshCw,
-  Lock, Ban, ShieldOff, Trash2, EyeOff, Eye,
+  Lock, Ban, ShieldOff, Trash2, EyeOff, Eye, Power,
 } from 'lucide-react';
 import Header from '@/components/Header';
 import { devicesApi, userCommandsApi, userAppBlocksApi } from '@/lib/api';
@@ -107,7 +107,7 @@ export default function RemoteQuickPage() {
       const r = await userCommandsApi.list(selected);
       setCommands(
         (r.data as Cmd[]).filter((c) =>
-          ['lock_device', 'block_app', 'unblock_app', 'hide_app', 'show_app'].includes(c.commandType)
+          ['lock_device', 'reboot_device', 'block_app', 'unblock_app', 'hide_app', 'show_app'].includes(c.commandType)
         )
       );
     } catch {}
@@ -248,13 +248,23 @@ export default function RemoteQuickPage() {
             <h3 className="font-semibold text-gray-800">Lock Device</h3>
           </div>
           <p className="text-xs text-gray-400">
-            Immediately locks the screen using the Accessibility Service.
+            Immediately locks the screen using the Accessibility Service. Reboot requires the app
+            to be set up as device owner.
           </p>
-          <button onClick={lockDevice} disabled={isBusy || !selected}
-            className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-md">
-            {busy === 'lock_device' ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
-            Lock Device Now
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={lockDevice} disabled={isBusy || !selected}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-md">
+              {busy === 'lock_device' ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
+              Lock Device Now
+            </button>
+            <button
+              onClick={() => { if (confirm('Reboot the device now?')) sendCmd('reboot_device'); }}
+              disabled={isBusy || !selected}
+              className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-700 hover:bg-slate-800 text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-md">
+              {busy === 'reboot_device' ? <Loader size={16} className="animate-spin" /> : <Power size={16} />}
+              Reboot Device
+            </button>
+          </div>
         </div>
 
         {/* ── Block / Unblock App ──────────────────────────────────────────── */}

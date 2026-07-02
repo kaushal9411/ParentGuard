@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Camera, Mic, FolderOpen, Shield,
-  Wifi, WifiOff, ChevronRight, Radio, Monitor, AppWindow, MapPin, AlarmClock, Siren,
+  Wifi, WifiOff, ChevronRight, Radio, Monitor, AppWindow, MapPin, AlarmClock, Siren, Cpu,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
@@ -95,6 +95,16 @@ const CARDS = [
     iconBg: 'bg-amber-500/20',
     iconColor: 'text-amber-400',
     types: ['set_alarm', 'set_reminder'],
+  },
+  {
+    key: 'controls',
+    label: 'Device Controls',
+    desc: 'Reboot the device and other power/system controls',
+    icon: Cpu,
+    gradient: 'from-slate-600 to-gray-700',
+    iconBg: 'bg-slate-500/20',
+    iconColor: 'text-slate-300',
+    types: ['reboot_device', 'set_volume', 'set_wifi', 'set_mobile_data'],
   },
   {
     key: 'geofencing',

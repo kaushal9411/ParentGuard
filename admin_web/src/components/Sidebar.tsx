@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Smartphone, MapPin, BarChart2, Bell, CreditCard, Download,
   LogOut, ChevronRight, ChevronLeft, ChevronDown, Image, Globe, Camera, Mic,
   FolderOpen, Zap, Map, Ban, MessageSquare, Monitor, AppWindow, Phone, Users,
-  AlarmClock, Siren,
+  AlarmClock, Siren, Cpu,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { clearAuth } from '@/lib/auth';
@@ -45,6 +45,7 @@ const NAV: NavItem[] = [
       { href: '/dashboard/remote/apps',       icon: AppWindow,  label: 'Installed Apps',  feature: 'remoteCommands' },
       { href: '/dashboard/remote/sos',        icon: Siren,      label: 'SOS & Emergency', feature: 'remoteCommands' },
       { href: '/dashboard/remote/alarm',      icon: AlarmClock, label: 'Alarms & Reminders', feature: 'remoteCommands' },
+      { href: '/dashboard/remote/controls',   icon: Cpu,        label: 'Device Controls', feature: 'remoteCommands' },
       { href: '/dashboard/remote/quick',      icon: Zap,        label: 'Quick Commands',  feature: 'remoteCommands' },
     ],
   },

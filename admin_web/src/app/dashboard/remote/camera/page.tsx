@@ -1,10 +1,12 @@
 ﻿'use client';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { Camera, Loader, Clock, AlertCircle, Download, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Camera, Video, Loader, Clock, AlertCircle, Download, Wifi, WifiOff, RefreshCw } from 'lucide-react';
 import Header from '@/components/Header';
 import { devicesApi, userCommandsApi } from '@/lib/api';
 import type { Device } from '@/types';
 import PageLoader from '@/components/PageLoader';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 interface Cmd {
   id: string; commandType: string; payload: string;
@@ -35,13 +37,16 @@ function PhotoCard({ cmd }: { cmd: Cmd }) {
   const st      = STATUS[cmd.status] ?? STATUS.pending;
   const payload = cmd.payload ? (() => { try { return JSON.parse(cmd.payload); } catch { return {}; } })() : {};
   const isPending = ['pending','delivered','executing'].includes(cmd.status);
+  const isVideo = cmd.commandType === 'capture_video';
 
   return (
     <div className="card overflow-hidden p-0">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
-          <Camera size={14} className="text-pink-500" />
-          <span className="text-sm font-semibold capitalize">{payload.camera ?? 'back'} camera</span>
+          {isVideo ? <Video size={14} className="text-rose-500" /> : <Camera size={14} className="text-pink-500" />}
+          <span className="text-sm font-semibold capitalize">
+            {payload.camera ?? 'back'} camera{isVideo ? ' · video' : ''}
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full ${st.dot}`} />
@@ -49,7 +54,15 @@ function PhotoCard({ cmd }: { cmd: Cmd }) {
         </div>
       </div>
 
-      {result?.type === 'photo' && result.data ? (
+      {result?.type === 'video_url' && result.url ? (
+        <div className="relative">
+          <video src={`${API_URL}${result.url}`} controls className="w-full max-h-80 bg-gray-900" />
+          <a href={`${API_URL}${result.url}`} download={`video_${cmd.id.slice(0,8)}.mp4`}
+            className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs px-3 py-1.5 rounded-full">
+            <Download size={12} /> Save
+          </a>
+        </div>
+      ) : result?.type === 'photo' && result.data ? (
         <div className="relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`data:${result.mimeType ?? 'image/jpeg'};base64,${result.data}`}
@@ -103,7 +116,8 @@ export default function RemoteCameraPage() {
     if (!selected) return;
     try {
       const r = await userCommandsApi.list(selected);
-      setCommands((r.data as Cmd[]).filter((c) => c.commandType === 'capture_photo'));
+      setCommands((r.data as Cmd[]).filter((c) =>
+        c.commandType === 'capture_photo' || c.commandType === 'capture_video'));
     } catch {}
   }, [selected]);
 
@@ -120,6 +134,15 @@ export default function RemoteCameraPage() {
     setBusy(facing);
     try {
       await userCommandsApi.issue(selected, 'capture_photo', { camera: facing });
+      await fetchCommands();
+    } finally { setBusy(null); }
+  }
+
+  async function sendVideo(facing: 'back' | 'front') {
+    if (!selected) return;
+    setBusy('vid_' + facing);
+    try {
+      await userCommandsApi.issue(selected, 'capture_video', { camera: facing, durationSeconds: 8 });
       await fetchCommands();
     } finally { setBusy(null); }
   }
@@ -163,6 +186,16 @@ export default function RemoteCameraPage() {
             <button key={btn.facing} onClick={() => send(btn.facing)} disabled={!!busy}
               className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-md ${btn.color}`}>
               {busy === btn.facing ? <Loader size={16} className="animate-spin" /> : <Camera size={16} />}
+              {btn.label}
+            </button>
+          ))}
+          {[
+            { label: '🎥 Back Video',  facing: 'back'  as const, color: 'bg-rose-600 hover:bg-rose-700' },
+            { label: '🎥 Front Video', facing: 'front' as const, color: 'bg-fuchsia-600 hover:bg-fuchsia-700' },
+          ].map((btn) => (
+            <button key={'vid_' + btn.facing} onClick={() => sendVideo(btn.facing)} disabled={!!busy}
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-md ${btn.color}`}>
+              {busy === 'vid_' + btn.facing ? <Loader size={16} className="animate-spin" /> : <Video size={16} />}
               {btn.label}
             </button>
           ))}

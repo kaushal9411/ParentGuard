@@ -9,6 +9,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Prefer WiFi sync -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Toggle Wi-Fi (works pre-Android 10; 10+ opens the Wi-Fi panel) -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
 
     <!-- ── Location ─────────────────────────────────────────────────────── -->
     <!-- Standard GPS / network-fused location -->

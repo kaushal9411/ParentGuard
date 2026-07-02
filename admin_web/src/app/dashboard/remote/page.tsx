@@ -1,7 +1,7 @@
 'use client';
 import { useRouter } from 'next/navigation';
 import {
-  Camera, Mic, FolderOpen, Shield, Monitor, AppWindow, AlarmClock, Siren,
+  Camera, Mic, FolderOpen, Shield, Monitor, AppWindow, AlarmClock, Siren, Cpu,
   ChevronRight, Radio,
 } from 'lucide-react';
 import Header from '@/components/Header';
@@ -78,6 +78,15 @@ const CARDS = [
     iconBg: 'bg-indigo-100',
     iconColor: 'text-indigo-600',
     accent: 'from-indigo-500 to-violet-600',
+  },
+  {
+    key: 'controls',
+    label: 'Device Controls',
+    desc: 'Reboot the device and other power/system controls',
+    icon: Cpu,
+    iconBg: 'bg-slate-100',
+    iconColor: 'text-slate-600',
+    accent: 'from-slate-500 to-gray-600',
   },
 ] as const;
 

@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { MapPin, Navigation, Clock, ExternalLink } from 'lucide-react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { MapPin, Navigation, Clock, ExternalLink, Radio, Loader } from 'lucide-react';
 import Header from '@/components/Header';
-import { devicesApi, locationApi } from '@/lib/api';
+import { devicesApi, locationApi, userCommandsApi } from '@/lib/api';
 import type { Device, LocationLog } from '@/types';
 import PageLoader from '@/components/PageLoader';
+import { toast } from 'sonner';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -40,6 +41,13 @@ export default function LocationPage() {
   const [loading,    setLoading]    = useState(false);
   const [devLoading, setDevLoading] = useState(true);
   const [pinned,     setPinned]     = useState<LocationLog | null>(null);
+  const [live,       setLive]       = useState(false);
+  const [busy,       setBusy]       = useState(false);
+
+  // Track whether the user is "following" the latest fix (vs. inspecting an old one).
+  const latestIdRef = useRef<string>('');
+  const pinnedIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => { pinnedIdRef.current = pinned?.id; }, [pinned]);
 
   useEffect(() => {
     devicesApi.list()
@@ -52,19 +60,57 @@ export default function LocationPage() {
       .finally(() => setDevLoading(false));
   }, []);
 
+  const refresh = useCallback(async (devId: string, showSpinner: boolean) => {
+    if (showSpinner) setLoading(true);
+    try {
+      const r = await locationApi.history(devId, 50);
+      const data: LocationLog[] = r.data;
+      const wasFollowing = !pinnedIdRef.current || pinnedIdRef.current === latestIdRef.current;
+      setLogs(data);
+      if (wasFollowing && data.length > 0) setPinned(data[0]);
+      latestIdRef.current = data[0]?.id ?? '';
+    } catch {
+      if (showSpinner) setLogs([]);
+    } finally {
+      if (showSpinner) setLoading(false);
+    }
+  }, []);
+
+  // Initial + on device change
   useEffect(() => {
     if (!selected) return;
-    setLoading(true);
     setPinned(null);
-    locationApi.history(selected, 50)
-      .then((r) => {
-        const data: LocationLog[] = r.data;
-        setLogs(data);
-        if (data.length > 0) setPinned(data[0]);
-      })
-      .catch(() => setLogs([]))
-      .finally(() => setLoading(false));
-  }, [selected]);
+    pinnedIdRef.current = undefined;
+    latestIdRef.current = '';
+    refresh(selected, true);
+  }, [selected, refresh]);
+
+  // Live auto-refresh loop
+  useEffect(() => {
+    if (!selected || !live) return;
+    const t = setInterval(() => refresh(selected, false), 8000);
+    return () => clearInterval(t);
+  }, [selected, live, refresh]);
+
+  async function toggleLive() {
+    if (!selected) return;
+    setBusy(true);
+    try {
+      if (!live) {
+        await userCommandsApi.issue(selected, 'start_live_location', { durationMinutes: 5 });
+        setLive(true);
+        toast.success('Live tracking started — following the child for 5 minutes');
+      } else {
+        await userCommandsApi.issue(selected, 'stop_live_location');
+        setLive(false);
+        toast.success('Live tracking stopped');
+      }
+    } catch {
+      toast.error('Failed to change live tracking');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const mapsUrl = pinned
     ? `https://www.google.com/maps?q=${pinned.latitude},${pinned.longitude}`
@@ -87,13 +133,26 @@ export default function LocationPage() {
                 <option key={d.deviceId} value={d.deviceId}>{d.name}</option>
               ))}
             </select>
+            <button onClick={toggleLive} disabled={busy || !selected}
+              className={`ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 ${
+                live ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+              {busy ? <Loader size={15} className="animate-spin" />
+                    : <Radio size={15} className={live ? 'animate-pulse' : ''} />}
+              {live ? 'Stop Live' : 'Start Live Tracking'}
+            </button>
             {pinned && mapsUrl && (
               <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                className="btn-outline ml-auto flex items-center gap-1.5 text-sm">
+                className="btn-outline flex items-center gap-1.5 text-sm">
                 <ExternalLink size={15} /> Open in Google Maps
               </a>
             )}
           </div>
+          {live && (
+            <p className="mt-2 text-xs text-emerald-600 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              Live — map updates every ~10s and follows the newest location.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">

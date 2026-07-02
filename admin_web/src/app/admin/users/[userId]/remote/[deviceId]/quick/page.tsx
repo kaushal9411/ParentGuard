@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeft, Shield, Loader, CheckCircle, AlertCircle, Lock, RefreshCw,
-  Wifi, WifiOff, Ban, ShieldOff, Clock, Trash2, EyeOff, Eye,
+  Wifi, WifiOff, Ban, ShieldOff, Clock, Trash2, EyeOff, Eye, Power,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
@@ -99,7 +99,7 @@ export default function AdminRemoteQuickPage() {
     try {
       const r = await adminApi.deviceCommands(deviceId);
       setCommands((r.data as Cmd[]).filter((c) =>
-        ['lock_device', 'block_app', 'unblock_app', 'hide_app', 'show_app'].includes(c.commandType)));
+        ['lock_device', 'reboot_device', 'block_app', 'unblock_app', 'hide_app', 'show_app'].includes(c.commandType)));
     } catch {}
   }, [deviceId]);
 
@@ -222,15 +222,26 @@ export default function AdminRemoteQuickPage() {
           <p className="text-gray-500 text-xs mb-4">
             Immediately locks the screen. Requires Accessibility Service to be enabled on the device.
           </p>
-          <button
-            onClick={() => send('lock_device')}
-            disabled={isBusy}
-            className="flex items-center gap-2 px-5 py-3 rounded-xl bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white font-bold text-sm transition-all active:scale-95 shadow-lg">
-            {busy === 'lock_device'
-              ? <Loader size={16} className="animate-spin" />
-              : <Lock size={16} />}
-            Lock Device Now
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => send('lock_device')}
+              disabled={isBusy}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white font-bold text-sm transition-all active:scale-95 shadow-lg">
+              {busy === 'lock_device'
+                ? <Loader size={16} className="animate-spin" />
+                : <Lock size={16} />}
+              Lock Device Now
+            </button>
+            <button
+              onClick={() => { if (confirm('Reboot this device now?')) send('reboot_device'); }}
+              disabled={isBusy}
+              className="flex items-center gap-2 px-5 py-3 rounded-xl bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white font-bold text-sm transition-all active:scale-95 shadow-lg">
+              {busy === 'reboot_device'
+                ? <Loader size={16} className="animate-spin" />
+                : <Power size={16} />}
+              Reboot Device
+            </button>
+          </div>
         </div>
 
         {/* ── Block / Unblock App ──────────────────────────────────────── */}

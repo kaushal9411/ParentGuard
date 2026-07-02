@@ -93,6 +93,7 @@ class _TrackingHomePageState extends ConsumerState<TrackingHomePage>
       _SpecialAccess(svc.openUsageStatsSettings, svc.isUsageStatsGranted),
       _SpecialAccess(svc.openNotificationAccessSettings, svc.isNotificationAccessGranted),
       _SpecialAccess(svc.openAccessibilitySettings, svc.isAccessibilityGranted),
+      _SpecialAccess(svc.openExactAlarmSettings, svc.isExactAlarmGranted),
     ];
     for (final s in queue) {
       if (!mounted) return;
@@ -246,6 +247,7 @@ class _PermissionPanelState extends State<_PermissionPanel>
       svc.isUsageStatsGranted(),        // 8
       svc.isNotificationAccessGranted(), // 9
       svc.isAccessibilityGranted(),     // 10
+      svc.isExactAlarmGranted(),        // 11
     ]);
     if (!mounted) return;
     setState(() {
@@ -262,6 +264,7 @@ class _PermissionPanelState extends State<_PermissionPanel>
         'usage':         results[8],
         'notifications': results[9],
         'accessibility': results[10],
+        'exactAlarm':    results[11],
       };
     });
   }
@@ -375,6 +378,10 @@ class _PermissionPanelState extends State<_PermissionPanel>
             _permRow('Accessibility Service', 'accessibility',
                 isSettings: true,
                 onAllow: () => widget.svc.openAccessibilitySettings()),
+            _divider(),
+            _permRow('Alarms & Reminders', 'exactAlarm',
+                isSettings: true,
+                onAllow: () => widget.svc.openExactAlarmSettings()),
             const SizedBox(height: 4),
           ],
         ],

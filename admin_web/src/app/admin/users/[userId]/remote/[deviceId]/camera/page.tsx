@@ -2,11 +2,13 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  ArrowLeft, Camera, Loader, AlertCircle, Download,
+  ArrowLeft, Camera, Video, Loader, AlertCircle, Download,
   Clock, RefreshCw, Wifi, WifiOff,
 } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
 import PageLoader from '@/components/PageLoader';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
 interface Cmd {
   id: string; commandType: string; payload: string;
@@ -38,14 +40,15 @@ function PhotoCard({ cmd }: { cmd: Cmd }) {
   const st      = STATUS[cmd.status] ?? STATUS.pending;
   const payload = (() => { try { return JSON.parse(cmd.payload); } catch { return {}; } })();
   const isPending = ['pending','delivered','executing'].includes(cmd.status);
+  const isVideo = cmd.commandType === 'capture_video';
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <div className="flex items-center gap-2">
-          <Camera size={14} className="text-pink-400" />
+          {isVideo ? <Video size={14} className="text-rose-400" /> : <Camera size={14} className="text-pink-400" />}
           <span className="text-white text-xs font-semibold capitalize">
-            {payload.camera ?? 'back'} camera
+            {payload.camera ?? 'back'} camera{isVideo ? ' · video' : ''}
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -54,7 +57,15 @@ function PhotoCard({ cmd }: { cmd: Cmd }) {
         </div>
       </div>
 
-      {result?.type === 'photo' && result.data ? (
+      {result?.type === 'video_url' && result.url ? (
+        <div className="relative">
+          <video src={`${API_URL}${result.url}`} controls className="w-full max-h-96 bg-black" />
+          <a href={`${API_URL}${result.url}`} download={`video_${cmd.id.slice(0,8)}.mp4`}
+            className="absolute bottom-3 right-3 flex items-center gap-1.5 bg-black/60 hover:bg-black/80 text-white text-xs px-3 py-1.5 rounded-full transition-colors">
+            <Download size={12} /> Save
+          </a>
+        </div>
+      ) : result?.type === 'photo' && result.data ? (
         <div className="relative">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`data:${result.mimeType ?? 'image/jpeg'};base64,${result.data}`}
@@ -106,7 +117,8 @@ export default function AdminRemoteCameraPage() {
   const fetchCmds = useCallback(async () => {
     try {
       const r = await adminApi.deviceCommands(deviceId);
-      setCommands((r.data as Cmd[]).filter((c) => c.commandType === 'capture_photo'));
+      setCommands((r.data as Cmd[]).filter((c) =>
+        c.commandType === 'capture_photo' || c.commandType === 'capture_video'));
     } catch {}
   }, [deviceId]);
 
@@ -121,6 +133,14 @@ export default function AdminRemoteCameraPage() {
     setBusy(facing);
     try {
       await adminApi.issueCommand(deviceId, 'capture_photo', { camera: facing });
+      await fetchCmds();
+    } finally { setBusy(null); }
+  }
+
+  async function sendVideo(facing: 'back' | 'front') {
+    setBusy('vid_' + facing);
+    try {
+      await adminApi.issueCommand(deviceId, 'capture_video', { camera: facing, durationSeconds: 8 });
       await fetchCmds();
     } finally { setBusy(null); }
   }
@@ -164,6 +184,16 @@ export default function AdminRemoteCameraPage() {
             <button key={btn.facing} onClick={() => send(btn.facing)} disabled={!!busy}
               className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-lg ${btn.color}`}>
               {busy === btn.facing ? <Loader size={16} className="animate-spin" /> : <Camera size={16} />}
+              {btn.label}
+            </button>
+          ))}
+          {([
+            { label: '🎥 Record Back Video',  facing: 'back'  as const, color: 'bg-rose-600 hover:bg-rose-700' },
+            { label: '🎥 Record Front Video', facing: 'front' as const, color: 'bg-fuchsia-600 hover:bg-fuchsia-700' },
+          ] as const).map((btn) => (
+            <button key={'vid_' + btn.facing} onClick={() => sendVideo(btn.facing)} disabled={!!busy}
+              className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 shadow-lg ${btn.color}`}>
+              {busy === 'vid_' + btn.facing ? <Loader size={16} className="animate-spin" /> : <Video size={16} />}
               {btn.label}
             </button>
           ))}

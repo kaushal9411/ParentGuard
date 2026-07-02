@@ -39,6 +39,9 @@ class PermissionService {
   Future<bool> isAccessibilityGranted() =>
       TrackingChannel.instance.isAccessibilityGranted();
 
+  /// Exact-alarm special access (Android 12+). Always true below API 31.
+  Future<bool> isExactAlarmGranted() => Permission.scheduleExactAlarm.isGranted;
+
   // ── Request / open settings ────────────────────────────────────────────────
 
   /// Requests all standard runtime permissions in the correct order.
@@ -178,6 +181,11 @@ class PermissionService {
 
   Future<void> openAccessibilitySettings() =>
       TrackingChannel.instance.openAccessibilitySettings();
+
+  /// Opens the "Alarms & reminders" special-access screen (Android 12+) so
+  /// remotely-scheduled alarms/reminders can fire at the exact time.
+  Future<void> openExactAlarmSettings() =>
+      Permission.scheduleExactAlarm.request();
 
   Future<void> openSystemSettings() => openAppSettings();
 }

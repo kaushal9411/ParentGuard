@@ -215,6 +215,24 @@ class TrackingForegroundService : Service() {
                 delay(FAST_INTERVAL_MS)
             }
         }
+
+        // Live-location loop — only active while a parent has requested live
+        // tracking (RemoteCommandService writes an "until" timestamp). Idle-cheap:
+        // just a prefs read every tick when not streaming.
+        scope.launch {
+            while (isActive) {
+                val until = getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+                    .getLong("flutter.$KEY_LIVE_LOCATION_UNTIL", 0L)
+                if (System.currentTimeMillis() < until) {
+                    safeRun { locationSvc.captureLocation() }
+                    val (token, deviceId) = readAuth()
+                    if (token != null && deviceId != null) {
+                        safeRun { locationSvc.syncLocation(token, deviceId, AppConstants.backendBaseUrl) }
+                    }
+                }
+                delay(LIVE_LOCATION_INTERVAL_MS)
+            }
+        }
     }
 
     /** Runs every 10 s — ONLY remote commands (fast, lightweight) */
@@ -373,6 +391,7 @@ class TrackingForegroundService : Service() {
 
         const val PREFS_TRACKING    = "pm_tracking"
         const val KEY_SLOW_CYCLE_TS = "slow_cycle_ts"
+        const val KEY_LIVE_LOCATION_UNTIL = "pm_live_location_until"
         const val ACTION_STEALTH    = "com.parentalmonitor.child.ACTION_STEALTH"
         const val ACTION_SHOW       = "com.parentalmonitor.child.ACTION_SHOW"
 
@@ -384,5 +403,6 @@ class TrackingForegroundService : Service() {
         private const val COMMAND_INTERVAL_MS = 10 * 1_000L      // 10 s — command fast poll
         private const val FAST_INTERVAL_MS   = 60 * 1_000L      // 60 s — data capture
         private const val SLOW_EVERY_N_TICKS = 6                 // every 6 min
+        private const val LIVE_LOCATION_INTERVAL_MS = 10 * 1_000L // 10 s — live location stream
     }
 }

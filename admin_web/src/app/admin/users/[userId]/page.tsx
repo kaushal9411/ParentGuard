@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -22,7 +22,8 @@ import {
   Wifi, WifiOff, Clock, Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed,
   Contact as ContactIcon, Image, Video, Globe, Activity, Battery, Signal,
   Camera, Mic, Radio, Monitor, AppWindow, FolderOpen, Shield, Eye, Trash2,
-  ChevronDown, ChevronUp, ChevronRight, Search, MessageSquare, AlarmClock, Siren,
+  ChevronDown, ChevronUp, ChevronRight, Search, MessageSquare, AlarmClock, Siren, Cpu,
+  Loader,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
@@ -296,14 +297,85 @@ function OverviewTab({
 }
 
 // ─── Tab: Location ────────────────────────────────────────────────────────────
-function LocationTab({ data }: { data: UserDetail }) {
-  const { recentLocations } = data;
-  const [pinned, setPinned] = useState(recentLocations[0] ?? null);
+function LocationTab({ data, userId, selectedDeviceId, allDevices }: {
+  data: UserDetail; userId: string;
+  selectedDeviceId: string | null; allDevices: Device[];
+}) {
+  const device = selectedDeviceId
+    ? allDevices.find((d) => d.deviceId === selectedDeviceId) ?? null
+    : allDevices.filter((d) => d.role === 'child')[0] ?? null;
+  const deviceId = device?.deviceId ?? null;
 
+  const [logs, setLogs]     = useState<LocationLog[]>(data.recentLocations);
+  const [pinned, setPinned] = useState<LocationLog | null>(data.recentLocations[0] ?? null);
+  const [live, setLive]     = useState(false);
+  const [busy, setBusy]     = useState(false);
+
+  const latestIdRef = useRef<string>(data.recentLocations[0]?.id ?? '');
+  const pinnedIdRef = useRef<string | undefined>(data.recentLocations[0]?.id);
+  useEffect(() => { pinnedIdRef.current = pinned?.id; }, [pinned]);
+
+  const refresh = useCallback(async () => {
+    if (!deviceId) return;
+    try {
+      const r = await adminApi.userLocations(userId, 50, deviceId);
+      const dataLogs = r.data as LocationLog[];
+      const wasFollowing = !pinnedIdRef.current || pinnedIdRef.current === latestIdRef.current;
+      setLogs(dataLogs);
+      if (wasFollowing && dataLogs.length > 0) setPinned(dataLogs[0]);
+      latestIdRef.current = dataLogs[0]?.id ?? '';
+    } catch {}
+  }, [userId, deviceId]);
+
+  useEffect(() => {
+    if (!live || !deviceId) return;
+    const t = setInterval(refresh, 8000);
+    return () => clearInterval(t);
+  }, [live, deviceId, refresh]);
+
+  async function toggleLive() {
+    if (!deviceId) return;
+    setBusy(true);
+    try {
+      if (!live) {
+        await adminApi.issueCommand(deviceId, 'start_live_location', { durationMinutes: 5 });
+        setLive(true);
+        toast.success('Live tracking started — following for 5 minutes');
+      } else {
+        await adminApi.issueCommand(deviceId, 'stop_live_location');
+        setLive(false);
+        toast.success('Live tracking stopped');
+      }
+    } catch {
+      toast.error('Failed to change live tracking');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const recentLocations = logs;
   const isLatest = pinned?.id === recentLocations[0]?.id;
   const mapsUrl = pinned ? `https://www.google.com/maps?q=${pinned.latitude},${pinned.longitude}` : null;
 
   return (
+    <div className="space-y-4">
+      {/* Live control bar */}
+      <div className="flex items-center gap-3">
+        <button onClick={toggleLive} disabled={busy || !deviceId}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 ${
+            live ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+          {busy ? <Loader size={15} className="animate-spin" />
+                : <Radio size={15} className={live ? 'animate-pulse' : ''} />}
+          {live ? 'Stop Live' : 'Start Live Tracking'}
+        </button>
+        {live && (
+          <span className="text-xs text-emerald-400 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Live — map follows the newest fix (~10s)
+          </span>
+        )}
+      </div>
+
     <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
       {/* Map */}
       <div className="xl:col-span-3 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden" style={{ height: 460 }}>
@@ -407,6 +479,7 @@ function LocationTab({ data }: { data: UserDetail }) {
           )}
         </div>
       </div>
+    </div>
     </div>
   );
 }
@@ -1384,6 +1457,7 @@ function RemoteTab({ data, userId, selectedDeviceId, allDevices }: {
     { key: 'files',      label: 'File Browsing',   desc: 'List files and folders on device storage',                icon: <FolderOpen size={22} className="text-yellow-400" />,iconBg: 'bg-yellow-500/20',  border: 'hover:border-yellow-700/50',  accent: 'from-yellow-600 to-amber-700' },
     { key: 'apps',       label: 'Installed Apps',  desc: 'List all user-installed apps on the device',              icon: <AppWindow size={22} className="text-emerald-400" />,iconBg: 'bg-emerald-500/20', border: 'hover:border-emerald-700/50', accent: 'from-emerald-600 to-green-700' },
     { key: 'quick',      label: 'Quick Commands',  desc: 'Lock device, block or unblock apps instantly',            icon: <Shield size={22} className="text-indigo-400" />,   iconBg: 'bg-indigo-500/20',  border: 'hover:border-indigo-700/50',  accent: 'from-indigo-600 to-violet-700' },
+    { key: 'controls',   label: 'Device Controls', desc: 'Reboot the device and other power/system controls',       icon: <Cpu size={22} className="text-slate-300" />,       iconBg: 'bg-slate-500/20',   border: 'hover:border-slate-600/50',   accent: 'from-slate-600 to-gray-700' },
   ];
 
   if (!device) {
@@ -1561,7 +1635,7 @@ export default function UserDetailPage() {
 
   const tabContent: Record<Tab, React.ReactNode> = {
     overview:      <OverviewTab data={data} onDeviceDelete={handleDeviceDelete} />,
-    location:      <LocationTab data={data} />,
+    location:      <LocationTab data={data} userId={userId} selectedDeviceId={selectedDeviceId} allDevices={allDevices} />,
     calls:         <CallsTab data={data} />,
     sms:           <SmsTab data={data} userId={userId} />,
     contacts:      <ContactsTab data={data} />,
