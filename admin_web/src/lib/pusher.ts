@@ -10,9 +10,9 @@ export function getPusher(): Pusher {
         wsHost:             process.env.NEXT_PUBLIC_SOKETI_HOST ?? 'localhost',
         wsPort:             Number(process.env.NEXT_PUBLIC_SOKETI_PORT ?? 6001),
         wssPort:            Number(process.env.NEXT_PUBLIC_SOKETI_PORT ?? 6001),
-        forceTLS:           false,
+        forceTLS:           process.env.NEXT_PUBLIC_SOKETI_FORCE_TLS === 'true',
         disableStats:       true,
-        enabledTransports:  ['ws'],
+        enabledTransports:  process.env.NEXT_PUBLIC_SOKETI_FORCE_TLS === 'true' ? ['wss'] : ['ws'],
         cluster:            'mt1', // required by pusher-js but ignored by Soketi
       },
     );
