@@ -17,3 +17,8 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# ── testing-deploy scripts generate these locally — never commit ──────────────
+infrastructure/testing-deploy/config.env
+infrastructure/testing-deploy/credentials.txt
+infrastructure/testing-deploy/*.pem
