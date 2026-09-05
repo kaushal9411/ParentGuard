@@ -19,14 +19,14 @@ SSH_KEY="./${KEY_NAME}.pem"
 REMOTE="ubuntu@${PUBLIC_IP}"
 REPO_ROOT="$(cd ../.. && pwd)"
 
-echo "Syncing repo to ${REMOTE}:~/ParentGuard ..."
+echo "Syncing repo to ${REMOTE}:~/repos/ParentGuard ..."
 rsync -az --delete \
   --exclude node_modules --exclude .git --exclude .next --exclude dist \
   --exclude mobile_app --exclude android_native \
   --exclude '.env' --exclude '.env.local' --exclude '.env.*.local' \
   --exclude '.env.development' --exclude '.env.production' --exclude '.env.test' \
   -e "ssh -i $SSH_KEY -o StrictHostKeyChecking=accept-new" \
-  "$REPO_ROOT/" "$REMOTE:~/ParentGuard/"
+  "$REPO_ROOT/" "$REMOTE:~/repos/ParentGuard/"
 
 echo "Rebuilding + restarting on the server (env/nginx untouched)..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$REMOTE" bash -s <<'REMOTE_SCRIPT'
@@ -34,7 +34,7 @@ set -euo pipefail
 export NODE_OPTIONS="--max-old-space-size=1536"
 
 echo "-- backend: npm install --"
-cd ~/ParentGuard/backend
+cd ~/repos/ParentGuard/backend
 npm install
 
 echo "-- prisma generate + migrate deploy (no-op if nothing changed) --"
@@ -45,12 +45,13 @@ echo "-- backend: build (tsc) --"
 npm run build
 
 echo "-- admin_web: npm install + build --"
-cd ~/ParentGuard/admin_web
-npm install
+cd ~/repos/ParentGuard/admin_web
+# --legacy-peer-deps: react-leaflet@^5 requires React 19, repo pins React 18
+npm install --legacy-peer-deps
 npm run build
 
 echo "-- restarting via pm2 --"
-pm2 restart parentguard-backend parentguard-admin
+pm2 restart parentguard-api parentguard-admin
 pm2 save
 REMOTE_SCRIPT
 

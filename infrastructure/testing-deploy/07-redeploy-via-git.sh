@@ -4,12 +4,9 @@
 # Useful when deploying from a machine that doesn't have a local clone of
 # this repo, just SSH access — this script only needs the SSH key.
 #
-# One-time setup required on the server before the first run (~/ParentGuard
-# there was populated by 03-deploy-app.sh's rsync, which never creates a
-# .git — turn it into a real repo once):
-#   ssh -i ./<key>.pem ubuntu@<ip>
-#   cd ~/ParentGuard && git init && git remote add origin <your-repo-url> \
-#     && git fetch origin main && git reset --hard origin/main
+# Targets the real shared deploy box (appkraft-server, 15.252.39.47 — also
+# hosts royalrummy/Lakadiya) at ~/repos/ParentGuard, which is already a git
+# clone with origin set — no one-time setup needed, this just works.
 #
 # Same tail as 06 otherwise (install/migrate/build/restart), domain/SSL
 # config untouched.
@@ -27,7 +24,7 @@ REMOTE="ubuntu@${PUBLIC_IP}"
 echo "Pulling latest main directly on ${REMOTE}..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$REMOTE" bash -s <<'REMOTE_SCRIPT'
 set -euo pipefail
-cd ~/ParentGuard
+cd ~/repos/ParentGuard
 export PATH="$PATH:$(npm config get prefix)/bin"
 export NODE_OPTIONS="--max-old-space-size=1536"
 
@@ -36,7 +33,7 @@ git fetch origin main
 git reset --hard origin/main
 
 echo "-- backend: npm install --"
-cd ~/ParentGuard/backend
+cd ~/repos/ParentGuard/backend
 npm install
 
 echo "-- prisma generate + migrate deploy (no-op if nothing changed) --"
@@ -47,12 +44,13 @@ echo "-- backend: build (tsc) --"
 npm run build
 
 echo "-- admin_web: npm install + build --"
-cd ~/ParentGuard/admin_web
-npm install
+cd ~/repos/ParentGuard/admin_web
+# --legacy-peer-deps: react-leaflet@^5 requires React 19, repo pins React 18
+npm install --legacy-peer-deps
 npm run build
 
 echo "-- restarting via pm2 --"
-pm2 restart parentguard-backend parentguard-admin
+pm2 restart parentguard-api parentguard-admin
 pm2 save
 REMOTE_SCRIPT
 
