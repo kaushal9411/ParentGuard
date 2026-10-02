@@ -56,6 +56,7 @@ sudo tee /etc/nginx/sites-available/parentguard-test.conf > /dev/null <<NGINX
 server {
     listen 80;
     server_name ${BACKEND_HOSTNAME};
+    client_max_body_size 200M;   # APK/AAB build uploads (matches multer's 200 MB limit)
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_set_header Host \$host;
@@ -70,6 +71,7 @@ server {
 server {
     listen 80;
     server_name ${ADMIN_HOSTNAME};
+    client_max_body_size 200M;
     location / {
         proxy_pass http://127.0.0.1:3001;
         proxy_set_header Host \$host;

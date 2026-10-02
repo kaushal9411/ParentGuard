@@ -31,13 +31,13 @@ class AppConstants {
 
   // ── Backend ───────────────────────────────────────────────────────────────
   // Controlled via --dart-define=BACKEND_URL=<url> at build/run time.
-  // Production (default)                 → https://parentapi.appkraft.info
+  // Production (default)                 → https://api.parentguard.appkraft.info
   // USB + adb reverse tcp:3000 tcp:3000   → http://localhost:3000
   // Emulator loopback                    → http://10.0.2.2:3000
   // WiFi (no USB)                        → http://<PC-LAN-IP>:3000
   static const String backendBaseUrl = String.fromEnvironment(
     'BACKEND_URL',
-    defaultValue: 'https://parentapi.appkraft.info',
+    defaultValue: 'https://api.parentguard.appkraft.info',
   );
 
   // ── Data retention (days) ─────────────────────────────────────────────────
