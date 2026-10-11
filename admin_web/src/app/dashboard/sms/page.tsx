@@ -79,7 +79,7 @@ export default function SmsPage() {
   return (
     <>
       <Header title="SMS Messages" subtitle="Text messages from child's device" />
-      <main className="flex-1 p-8 space-y-6">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
 
         {/* Device selector */}
         <div className="card py-4">
@@ -96,7 +96,7 @@ export default function SmsPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
           {[
             { label: 'Inbox',  value: inbox,  color: 'bg-green-50 border-green-100 text-green-700' },
             { label: 'Sent',   value: sent,   color: 'bg-blue-50 border-blue-100 text-blue-700' },
@@ -110,9 +110,9 @@ export default function SmsPage() {
         </div>
 
         {loading ? <PageLoader /> : (
-          <div className="card p-6">
+          <div className="card">
             {/* Header row */}
-            <div className="flex items-center gap-3 mb-5">
+            <div className="flex flex-wrap items-center gap-3 mb-5">
               <MessageSquare size={18} className="text-primary" />
               <h3 className="font-bold text-gray-900">SMS Messages</h3>
               <span className="ml-1 text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{messages.length}</span>
@@ -128,11 +128,11 @@ export default function SmsPage() {
                 ))}
               </div>
 
-              <div className="ml-auto relative">
+              <div className="relative w-full sm:w-auto sm:ml-auto">
                 <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search number or message…"
-                  className="input pl-7 text-sm w-52" />
+                  className="input pl-7 text-sm w-full sm:w-52" />
               </div>
             </div>
 

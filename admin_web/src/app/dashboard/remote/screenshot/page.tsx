@@ -220,7 +220,7 @@ export default function RemoteScreenshotPage() {
   return (
     <>
       <Header title="Screenshot & Recording" subtitle="Capture or record the child device screen" />
-      <main className="flex-1 p-8 space-y-6">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
 
         {/* Device selector */}
         <div className="card py-4">

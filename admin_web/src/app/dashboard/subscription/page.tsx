@@ -215,7 +215,7 @@ export default function SubscriptionPage() {
         </div>
       )}
 
-      <main className="flex-1 p-8 space-y-8">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-8">
 
         {/* ── Current plan ── */}
         {sub && (
@@ -387,7 +387,7 @@ export default function SubscriptionPage() {
         <div className="card overflow-hidden">
           <h3 className="font-bold text-gray-900 text-lg mb-5">Full Feature Comparison</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-500 text-xs uppercase tracking-wide">
                   <th className="text-left pb-3 pr-4 font-semibold">Feature</th>
@@ -449,7 +449,7 @@ export default function SubscriptionPage() {
 
             {showHistory && (
               <div className="mt-4 overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[560px] text-sm">
                   <thead>
                     <tr className="text-left text-gray-400 text-xs uppercase border-b border-gray-100">
                       <th className="pb-2 pr-4">Plan</th>

@@ -233,7 +233,7 @@ function AssignModal({ user, plans, onSave, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-800">
           <div>
             <h2 className="text-white font-bold">Assign Subscription</h2>
@@ -299,7 +299,7 @@ function SendPaymentLinkModal({ user, plans, onClose }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-800">
           <div>
             <h2 className="text-white font-bold flex items-center gap-2"><Link size={16} className="text-indigo-400" /> Send Payment Link</h2>
@@ -440,8 +440,8 @@ export default function SubscriptionsPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="px-8 pt-8 pb-0 border-b border-gray-800 space-y-4">
-        <div className="flex items-center justify-between">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-0 border-b border-gray-800 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-extrabold text-white flex items-center gap-3">
               <CreditCard size={24} className="text-indigo-400" /> Subscriptions
@@ -457,14 +457,14 @@ export default function SubscriptionsPage() {
         </div>
 
         {/* Stats */}
-        <div className="flex gap-6 text-sm pb-4">
+        <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm pb-4">
           <span className="text-gray-400"><span className="text-white font-bold">{plans.filter(p=>p.isActive).length}</span> active plans</span>
           <span className="text-gray-400"><span className="text-green-400 font-bold">{activeCount}</span> subscribed users</span>
           <span className="text-gray-400"><span className="text-yellow-400 font-bold">{noSubCount}</span> on free/none</span>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           {([
             ['plans',    `Plans (${plans.length})`],
             ['users',    `Users (${users.length})`],
@@ -472,7 +472,7 @@ export default function SubscriptionsPage() {
             ['payments', `Payment History (${payments.length})`],
           ] as const).map(([t, label]) => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors ${tab === t ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}>
+              className={`px-4 py-2 rounded-t-lg text-sm font-semibold whitespace-nowrap flex-shrink-0 transition-colors ${tab === t ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`}>
               {label}
             </button>
           ))}
@@ -480,7 +480,7 @@ export default function SubscriptionsPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-8 overflow-y-auto">
+      <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         {loading ? (
           <PageLoader theme="dark" />
         ) : tab === 'plans' ? (
@@ -554,7 +554,7 @@ export default function SubscriptionsPage() {
             </div>
 
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-800 text-gray-400 text-xs">
                     <th className="text-left px-5 py-3">User</th>
@@ -612,7 +612,7 @@ export default function SubscriptionsPage() {
                     <tr><td colSpan={5} className="text-center text-gray-500 py-12">No users found</td></tr>
                   )}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </div>
         ) : tab === 'requests' ? (
@@ -622,7 +622,7 @@ export default function SubscriptionsPage() {
             {requests.length === 0 ? (
               <div className="text-center text-gray-500 py-12">No upgrade requests yet</div>
             ) : (
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm">
                 <thead>
                   <tr className="border-b border-gray-800 text-gray-400 text-xs">
                     <th className="text-left px-5 py-3">User</th>
@@ -672,7 +672,7 @@ export default function SubscriptionsPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             )}
           </div>
 
@@ -708,7 +708,7 @@ export default function SubscriptionsPage() {
                 <div className="text-center text-gray-500 py-12">No payment records yet</div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[560px] text-sm">
                     <thead>
                       <tr className="border-b border-gray-800 text-gray-400 text-xs">
                         <th className="text-left px-5 py-3">User</th>

@@ -190,7 +190,7 @@ export default function GalleryPage() {
     <>
       <Header title="Gallery" subtitle="Photos and videos from child's device" />
 
-      <main className="flex-1 p-8 space-y-6">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Controls */}
         <div className="card py-4">
           <div className="flex flex-wrap items-center gap-4">

@@ -5,13 +5,15 @@ import { isAdminLoggedIn, getAdminToken } from '@/lib/adminAuth';
 import AdminSidebar from '@/components/AdminSidebar';
 import RouteLoader from '@/components/RouteLoader';
 import { Toaster, toast } from 'sonner';
-import { Bell, X, Wifi, RefreshCw } from 'lucide-react';
+import { Bell, X, Wifi, RefreshCw, Menu } from 'lucide-react';
 import { adminApi } from '@/lib/adminApi';
+import { MobileNavProvider, useMobileNav } from '@/context/MobileNavContext';
 
 interface LiveAlert { deviceName: string; userId: string; source: 'ws' | 'fcm'; }
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+function AdminShell({ children }: { children: React.ReactNode }) {
   const router   = useRouter();
+  const { toggle: toggleNav } = useMobileNav();
   const pathname = usePathname();
   const [alert,        setAlert]        = useState<LiveAlert | null>(null);
   const [wsLive,       setWsLive]       = useState(false);
@@ -136,7 +138,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
         {/* Live alert banner */}
         {alert && (
-          <div className="flex items-center gap-3 bg-indigo-600 px-5 py-2.5 text-white text-sm">
+          <div className="flex items-center gap-3 bg-indigo-600 px-4 sm:px-5 py-2.5 text-white text-sm">
             <Bell size={15} className="flex-shrink-0" />
             <span className="flex-1">
               New activity from <strong>{alert.deviceName}</strong>
@@ -159,8 +161,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         )}
 
         {/* Sync bar — always visible; button activates when on a device page */}
-        <div className="flex items-center justify-between bg-gray-900 border-b border-gray-800/60 px-6 py-2">
-          <span className="text-xs text-gray-500">
+        <div className="flex items-center justify-between gap-3 bg-gray-900 border-b border-gray-800/60 px-3 sm:px-6 py-2">
+          <button onClick={toggleNav} aria-label="Open menu"
+            className="lg:hidden p-2 -ml-1 rounded-lg text-gray-300 hover:bg-gray-800 flex-shrink-0">
+            <Menu size={20} />
+          </button>
+          <span title={wsLive ? 'Live' : 'Offline'}
+            className={`sm:hidden w-2 h-2 rounded-full flex-shrink-0 ${wsLive ? 'bg-green-400' : 'bg-gray-600'}`} />
+          <span className="text-xs text-gray-500 min-w-0 flex-1 truncate">
             {adminDeviceId
               ? <>Device: <span className="text-gray-400 font-mono">{adminDeviceId.slice(0, 12)}…</span>
                   {adminLastSync && <span className="ml-2 text-gray-600">· Last synced {adminLastSync.toLocaleTimeString()}</span>}
@@ -172,7 +180,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             onClick={syncAdminDevice}
             disabled={adminSyncing || !adminDeviceId}
             title={!adminDeviceId ? 'Open a device page first' : 'Pull fresh data from this device'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 text-white text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95">
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg flex-shrink-0 bg-emerald-700 hover:bg-emerald-600 disabled:bg-gray-700 text-white text-xs font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-95">
             <RefreshCw size={11} className={adminSyncing ? 'animate-spin' : ''} />
             {adminSyncing ? 'Syncing…' : 'Sync Device'}
           </button>
@@ -183,7 +191,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <Toaster position="top-right" theme="dark" richColors closeButton />
 
         {/* WebSocket live indicator (bottom-right) */}
-        <div className={`fixed bottom-4 right-4 flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all
+        <div className={`fixed bottom-4 right-4 hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border transition-all
           ${wsLive
             ? 'bg-green-950 border-green-800 text-green-400'
             : 'bg-gray-900 border-gray-700 text-gray-500'}`}
@@ -193,5 +201,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <MobileNavProvider>
+      <AdminShell>{children}</AdminShell>
+    </MobileNavProvider>
   );
 }

@@ -81,7 +81,7 @@ export default function AppReleasePage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="px-8 pt-8 pb-6 border-b border-gray-800">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-6 border-b border-gray-800">
         <h1 className="text-2xl font-extrabold text-white flex items-center gap-3">
           <Package size={24} className="text-indigo-400" /> App Release Management
         </h1>
@@ -96,7 +96,7 @@ export default function AppReleasePage() {
         </div>
       )}
 
-      <div className="flex-1 p-8 space-y-6 overflow-y-auto">
+      <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6 overflow-y-auto">
 
         {/* Current Release Card */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6">
@@ -167,7 +167,7 @@ export default function AppReleasePage() {
           {/* File picker */}
           <div
             onClick={() => fileRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors ${file ? 'border-indigo-500 bg-indigo-900/10' : 'border-gray-700 hover:border-gray-500'}`}
+            className={`border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-colors ${file ? 'border-indigo-500 bg-indigo-900/10' : 'border-gray-700 hover:border-gray-500'}`}
           >
             <input
               ref={fileRef}

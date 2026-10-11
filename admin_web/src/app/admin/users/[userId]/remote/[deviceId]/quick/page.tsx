@@ -147,7 +147,7 @@ export default function AdminRemoteQuickPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="px-8 pt-8 pb-5 border-b border-gray-800">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-5 border-b border-gray-800">
         <button onClick={() => router.push(`/admin/users/${userId}/remote/${deviceId}`)}
           className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-4 transition-colors">
           <ArrowLeft size={15} /> Remote Access
@@ -174,7 +174,7 @@ export default function AdminRemoteQuickPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8 space-y-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 space-y-6">
 
         {/* ── App Visibility ───────────────────────────────────────────── */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">

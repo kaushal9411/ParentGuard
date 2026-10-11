@@ -79,7 +79,7 @@ export default function AdminGeofencingPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="px-8 pt-8 pb-5 border-b border-gray-800">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-5 border-b border-gray-800">
         <button onClick={() => router.push(`/admin/users/${userId}/remote/${deviceId}`)}
           className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-4 transition-colors">
           <ArrowLeft size={15} /> Remote Access
@@ -111,7 +111,7 @@ export default function AdminGeofencingPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
         {loading ? <PageLoader theme="dark" /> : zones.length === 0 ? (
           <div className="text-center py-20">
             <MapPin size={52} className="mx-auto mb-4 text-gray-700" />

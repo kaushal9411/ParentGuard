@@ -46,44 +46,48 @@ const LoginSchema = z.object({
 
 // ── POST /api/auth/register ───────────────────────────────────────────────────
 
-router.post('/register', async (req: Request, res: Response) => {
-  const parsed = RegisterSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.flatten().fieldErrors });
-    return;
-  }
+router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const parsed = RegisterSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten().fieldErrors });
+      return;
+    }
 
-  const { name, email, password, deviceId, deviceName, deviceRole } = parsed.data;
+    const { name, email, password, deviceId, deviceName, deviceRole } = parsed.data;
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    res.status(409).json({ error: 'Email already registered' });
-    return;
-  }
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      res.status(409).json({ error: 'Email already registered' });
+      return;
+    }
 
-  const passwordHash = await bcrypt.hash(password, 10);
+    const passwordHash = await bcrypt.hash(password, 10);
 
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      passwordHash,
-      role: deviceRole === 'parent' ? 'parent' : 'child',
-      devices: {
-        create: { deviceId, name: deviceName, role: deviceRole },
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        passwordHash,
+        role: deviceRole === 'parent' ? 'parent' : 'child',
+        devices: {
+          create: { deviceId, name: deviceName, role: deviceRole },
+        },
       },
-    },
-  });
+    });
 
-  const token = signToken(user.id, user.role);
+    const token = signToken(user.id, user.role);
 
-  res.status(201).json({
-    token,
-    userId: user.id,
-    role: user.role,
-    name: user.name,
-    email: user.email,
-  });
+    res.status(201).json({
+      token,
+      userId: user.id,
+      role: user.role,
+      name: user.name,
+      email: user.email,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ── POST /api/auth/login ──────────────────────────────────────────────────────
@@ -121,46 +125,50 @@ router.post(
           return;
         }
 
-        // Auto-register device if new, or update lastSeen if already known
-        const { deviceId, deviceName } = req.body as { deviceId?: string; deviceName?: string };
-        if (deviceId) {
-          const existing = await prisma.device.findUnique({ where: { deviceId } });
-          if (existing) {
-            // Device exists — verify it belongs to this user
-            if (existing.userId !== user.userId) {
-              res.status(409).json({ error: 'Device is registered to a different account' });
-              return;
+        try {
+          // Auto-register device if new, or update lastSeen if already known
+          const { deviceId, deviceName } = req.body as { deviceId?: string; deviceName?: string };
+          if (deviceId) {
+            const existing = await prisma.device.findUnique({ where: { deviceId } });
+            if (existing) {
+              // Device exists — verify it belongs to this user
+              if (existing.userId !== user.userId) {
+                res.status(409).json({ error: 'Device is registered to a different account' });
+                return;
+              }
+              await prisma.device.update({
+                where: { deviceId },
+                data: { lastSeen: new Date(), isOnline: true },
+              });
+            } else {
+              // New device — register it under this user
+              await prisma.device.create({
+                data: {
+                  deviceId,
+                  name: deviceName ?? 'Unknown Device',
+                  role: 'child',
+                  userId: user.userId,
+                  isOnline: true,
+                  lastSeen: new Date(),
+                },
+              });
             }
-            await prisma.device.update({
-              where: { deviceId },
-              data: { lastSeen: new Date(), isOnline: true },
-            });
-          } else {
-            // New device — register it under this user
-            await prisma.device.create({
-              data: {
-                deviceId,
-                name: deviceName ?? 'Unknown Device',
-                role: 'child',
-                userId: user.userId,
-                isOnline: true,
-                lastSeen: new Date(),
-              },
-            });
           }
+
+          const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
+          const token = signToken(user.userId, user.role);
+
+          res.json({
+            token,
+            userId: user.userId,
+            role: user.role,
+            deviceId: deviceId ?? null,
+            name: dbUser?.name ?? '',
+            email: dbUser?.email ?? '',
+          });
+        } catch (e) {
+          next(e);
         }
-
-        const dbUser = await prisma.user.findUnique({ where: { id: user.userId } });
-        const token = signToken(user.userId, user.role);
-
-        res.json({
-          token,
-          userId: user.userId,
-          role: user.role,
-          deviceId: deviceId ?? null,
-          name: dbUser?.name ?? '',
-          email: dbUser?.email ?? '',
-        });
       },
     )(req, res, next);
   },
@@ -169,15 +177,19 @@ router.post(
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
 // Stateless JWT — client just discards the token. Mark device offline.
 
-router.post('/logout', async (req: Request, res: Response) => {
-  const { deviceId } = req.body as { deviceId?: string };
-  if (deviceId) {
-    await prisma.device.updateMany({
-      where: { deviceId },
-      data: { isOnline: false },
-    });
+router.post('/logout', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { deviceId } = req.body as { deviceId?: string };
+    if (deviceId) {
+      await prisma.device.updateMany({
+        where: { deviceId },
+        data: { isOnline: false },
+      });
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
   }
-  res.json({ ok: true });
 });
 
 // ── GET /api/auth/me ──────────────────────────────────────────────────────────
@@ -195,21 +207,25 @@ router.get(
           res.status(401).json({ error: 'Invalid or expired token' });
           return;
         }
-        const dbUser = await prisma.user.findUnique({
-          where: { id: user.userId },
-          include: { devices: true },
-        });
-        if (!dbUser) {
-          res.status(404).json({ error: 'User not found' });
-          return;
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.userId },
+            include: { devices: true },
+          });
+          if (!dbUser) {
+            res.status(404).json({ error: 'User not found' });
+            return;
+          }
+          res.json({
+            userId: dbUser.id,
+            name: dbUser.name,
+            email: dbUser.email,
+            role: dbUser.role,
+            devices: dbUser.devices,
+          });
+        } catch (e) {
+          next(e);
         }
-        res.json({
-          userId: dbUser.id,
-          name: dbUser.name,
-          email: dbUser.email,
-          role: dbUser.role,
-          devices: dbUser.devices,
-        });
       },
     )(req, res, next);
   },

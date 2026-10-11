@@ -4,10 +4,12 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Users, Smartphone, CreditCard, Download,
-  LogOut, ChevronRight, ChevronLeft, MessageSquare,
+  LogOut, ChevronRight, ChevronLeft, MessageSquare, X,
 } from 'lucide-react';
 import { clearAdminAuth, getAdminUser } from '@/lib/adminAuth';
 import { adminApi } from '@/lib/adminApi';
+import { useMobileNav } from '@/context/MobileNavContext';
+import { useMediaQuery } from '@/lib/useMediaQuery';
 
 const NAV = [
   { href: '/admin/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
@@ -40,12 +42,16 @@ export default function AdminSidebar() {
   const router   = useRouter();
   const [user,          setUser]    = useState<{ name: string; email: string } | null>(null);
   const [newInquiries,  setNewInq]  = useState(0);
-  const [collapsed,     setCollapsed] = useState(false);
+  const [collapsedPref, setCollapsedPref] = useState(false);
   const [mounted,       setMounted]   = useState(false);
+  const { open, setOpen } = useMobileNav();
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  // Collapsed (icon-only) mode only applies to the desktop sidebar; the mobile drawer is always full width
+  const collapsed = collapsedPref && isDesktop;
 
   useEffect(() => {
     const saved = localStorage.getItem('admin_sidebar_collapsed');
-    if (saved === 'true') setCollapsed(true);
+    if (saved === 'true') setCollapsedPref(true);
     setMounted(true);
     setUser(getAdminUser<{ name: string; email: string }>());
     adminApi.getInquiries('new')
@@ -54,8 +60,8 @@ export default function AdminSidebar() {
   }, []);
 
   function toggleCollapse() {
-    const next = !collapsed;
-    setCollapsed(next);
+    const next = !collapsedPref;
+    setCollapsedPref(next);
     localStorage.setItem('admin_sidebar_collapsed', String(next));
   }
 
@@ -68,11 +74,20 @@ export default function AdminSidebar() {
   const w = !mounted ? 'w-64' : collapsed ? 'w-16' : 'w-64';
 
   return (
-    <aside className={`${w} min-h-screen bg-gray-950 flex flex-col border-r border-gray-800
-      transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0`}>
+    <>
+    <div
+      onClick={() => setOpen(false)}
+      aria-hidden="true"
+      className={`fixed inset-0 z-40 bg-black/60 lg:hidden transition-opacity duration-300
+        ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+    />
+    <aside className={`${w} max-w-[85vw] bg-gray-950 flex flex-col border-r border-gray-800 overflow-hidden flex-shrink-0
+      fixed inset-y-0 left-0 z-50 transform transition-all duration-300 ease-in-out
+      ${open ? 'translate-x-0' : '-translate-x-full'}
+      lg:static lg:z-auto lg:min-h-screen lg:max-w-none lg:translate-x-0`}>
 
       {/* ── Logo ─────────────────────────────────────────────────────────────── */}
-      <div className={`flex items-center border-b border-gray-800 flex-shrink-0
+      <div className={`relative flex items-center border-b border-gray-800 flex-shrink-0
         ${collapsed ? 'justify-center py-[22px] px-0' : 'gap-3 px-6 py-6'}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="ParentGard" className="w-9 h-9 object-contain flex-shrink-0" />
@@ -80,6 +95,10 @@ export default function AdminSidebar() {
           <p className="text-white font-bold text-sm leading-none whitespace-nowrap">ParentGard</p>
           <p className="text-indigo-400 text-xs mt-0.5 font-semibold uppercase tracking-wide whitespace-nowrap">Admin Panel</p>
         </div>
+        <button onClick={() => setOpen(false)} aria-label="Close menu"
+          className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-gray-400 hover:bg-gray-800">
+          <X size={20} />
+        </button>
       </div>
 
       {/* ── Admin user card ───────────────────────────────────────────────────── */}
@@ -108,7 +127,7 @@ export default function AdminSidebar() {
       </div>
 
       {/* ── Navigation ───────────────────────────────────────────────────────── */}
-      <nav className={`flex-1 py-4 space-y-0.5 ${collapsed ? 'px-2' : 'px-3'}`}>
+      <nav className={`flex-1 min-h-0 overflow-y-auto py-4 space-y-0.5 ${collapsed ? 'px-2' : 'px-3'}`}>
         {NAV.map(({ href, icon: Icon, label }) => {
           const active      = pathname.startsWith(href);
           const isInquiry   = label === 'Inquiries';
@@ -165,7 +184,7 @@ export default function AdminSidebar() {
             </Tooltip>
           ) : (
             <button onClick={toggleCollapse}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+              className="hidden lg:flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                 text-gray-500 hover:bg-gray-800 hover:text-white transition-all duration-150">
               <ChevronLeft size={18} />
               <span className="whitespace-nowrap">Collapse Menu</span>
@@ -193,5 +212,6 @@ export default function AdminSidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

@@ -102,7 +102,7 @@ export default function RemoteAppsPage() {
   return (
     <>
       <Header title="Installed Apps" subtitle="View and block apps on child's device" />
-      <main className="flex-1 p-8 space-y-4">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-4">
 
         {/* Device selector */}
         <div className="card py-4">

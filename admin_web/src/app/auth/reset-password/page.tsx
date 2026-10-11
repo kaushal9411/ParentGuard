@@ -122,7 +122,7 @@ export default function ResetPasswordPage() {
             <span className="font-bold text-xl text-primary">ParentGard</span>
           </div>
         </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 sm:p-8">
           <Suspense fallback={<div className="text-center text-gray-400">Loading…</div>}>
             <ResetPasswordForm />
           </Suspense>

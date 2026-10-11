@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { Bell, User, RefreshCw } from 'lucide-react';
+import { Bell, User, RefreshCw, Menu } from 'lucide-react';
 import { getUser } from '@/lib/auth';
 import { devicesApi, userCommandsApi } from '@/lib/api';
 import { toast } from 'sonner';
+import { useMobileNav } from '@/context/MobileNavContext';
 
 interface Props { title: string; subtitle?: string; }
 
@@ -12,6 +13,7 @@ export default function Header({ title, subtitle }: Props) {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [syncing,  setSyncing]  = useState(false);
   const [lastSync, setLastSync] = useState<Date | null>(null);
+  const { toggle } = useMobileNav();
 
   useEffect(() => {
     setUser(getUser<{ name: string; email: string }>());
@@ -40,22 +42,29 @@ export default function Header({ title, subtitle }: Props) {
   }, [deviceId, syncing]);
 
   return (
-    <header className="bg-white border-b border-gray-100 px-8 py-4 flex items-center justify-between">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">{title}</h1>
-        {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+    <header className="bg-white border-b border-gray-100 px-4 sm:px-6 lg:px-8 py-3 sm:py-4 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-3 min-w-0">
+        <button onClick={toggle} aria-label="Open menu"
+          className="lg:hidden -ml-1 p-2 rounded-xl text-gray-600 hover:bg-gray-100 flex-shrink-0">
+          <Menu size={22} />
+        </button>
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 truncate">{title}</h1>
+          {subtitle && <p className="text-xs sm:text-sm text-gray-500 mt-0.5 truncate">{subtitle}</p>}
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
         {/* Global sync button — auto-targets the first child device */}
         {deviceId && (
           <button
             onClick={sync}
             disabled={syncing}
             title={lastSync ? `Last synced at ${lastSync.toLocaleTimeString()}` : 'Pull fresh data from device now'}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white text-sm font-semibold transition-all disabled:opacity-60 shadow-sm active:scale-95">
+            aria-label="Sync now"
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-primary hover:bg-primary/90 text-white text-sm font-semibold transition-all disabled:opacity-60 shadow-sm active:scale-95">
             <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
-            {syncing ? 'Syncing…' : 'Sync Now'}
+            <span className="hidden sm:inline">{syncing ? 'Syncing…' : 'Sync Now'}</span>
           </button>
         )}
 
@@ -64,11 +73,11 @@ export default function Header({ title, subtitle }: Props) {
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger rounded-full" />
         </button>
 
-        <div className="flex items-center gap-3 pl-3 border-l border-gray-200">
-          <div className="w-9 h-9 bg-primary rounded-full flex items-center justify-center">
+        <div className="flex items-center gap-3 pl-2 sm:pl-3 sm:border-l border-gray-200">
+          <div className="w-9 h-9 bg-primary rounded-full flex items-center justify-center flex-shrink-0">
             <User size={18} className="text-white" />
           </div>
-          <div>
+          <div className="hidden md:block">
             <p className="text-sm font-semibold text-gray-900 leading-none">{user?.name ?? ''}</p>
             <p className="text-xs text-gray-500 mt-0.5">{user?.email ?? ''}</p>
           </div>

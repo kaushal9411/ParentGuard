@@ -39,7 +39,7 @@ function AddModal({ deviceId, onClose, onCreated }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
           <h3 className="font-bold text-gray-900">Block an App</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-700"><X size={20} /></button>
@@ -157,7 +157,7 @@ export default function BlockedAppsPage() {
     <>
       <Header title="Blocked Apps" subtitle="Manage which apps are blocked on child's device" />
 
-      <main className="flex-1 p-8 space-y-6">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Controls */}
         <div className="card py-4">
           <div className="flex flex-wrap items-center gap-4">

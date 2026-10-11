@@ -88,10 +88,10 @@ function DeviceCard({
   ];
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition-colors">
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 sm:p-5 hover:border-gray-700 transition-colors">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2 mb-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1 basis-40">
           <div className="w-10 h-10 bg-indigo-700/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <Smartphone size={18} className="text-indigo-400" />
           </div>
@@ -121,7 +121,7 @@ function DeviceCard({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-800">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-3 border-t border-gray-800">
         <div className="text-xs text-gray-500 space-y-0.5">
           <p className="flex items-center gap-1">
             <Clock size={10} /> Last seen: {timeAgo(device.lastSeen)}
@@ -174,7 +174,7 @@ function UserGroup({
       {/* User header */}
       <button
         onClick={() => setExpanded((e) => !e)}
-        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-800/50 transition-colors"
+        className="w-full flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 hover:bg-gray-800/50 transition-colors"
       >
         <div className="w-10 h-10 bg-indigo-700 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
           {user.name.charAt(0).toUpperCase()}
@@ -183,15 +183,15 @@ function UserGroup({
           <p className="text-white font-bold text-sm truncate">{user.name}</p>
           <p className="text-gray-500 text-xs truncate">{user.email}</p>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          <span className="hidden sm:inline-block text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full">
             {user.devices.length} device{user.devices.length !== 1 ? 's' : ''}
           </span>
           <button
             onClick={(e) => { e.stopPropagation(); router.push(`/admin/users/${user.id}`); }}
             className="text-xs text-indigo-400 hover:text-indigo-300 px-2 py-0.5 rounded transition-colors"
           >
-            View User →
+            View<span className="hidden sm:inline"> User</span> →
           </button>
           {expanded
             ? <ChevronUp size={16} className="text-gray-500" />
@@ -201,7 +201,7 @@ function UserGroup({
 
       {/* Devices grid */}
       {expanded && (
-        <div className="px-5 pb-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 border-t border-gray-800 pt-4">
+        <div className="px-3 sm:px-5 pb-4 sm:pb-5 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 border-t border-gray-800 pt-4">
           {user.devices.map((d) => (
             <DeviceCard
               key={d.id}
@@ -291,7 +291,7 @@ export default function DevicesPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="px-8 pt-8 pb-6 border-b border-gray-800 space-y-4">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-6 border-b border-gray-800 space-y-4">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-extrabold text-white">Devices</h1>
@@ -331,7 +331,7 @@ export default function DevicesPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-8 overflow-y-auto">
+      <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         {loading ? (
           <PageLoader theme="dark" />
         ) : filtered.length === 0 ? (

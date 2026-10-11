@@ -150,7 +150,7 @@ export default function RemoteHubPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="px-8 pt-8 pb-6 border-b border-gray-800">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-6 border-b border-gray-800">
         <button onClick={() => router.push(`/admin/users/${userId}`)}
           className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-5 transition-colors">
           <ArrowLeft size={15} /> Back to User
@@ -184,7 +184,7 @@ export default function RemoteHubPage() {
       </div>
 
       {/* Cards grid */}
-      <div className="flex-1 p-8 overflow-y-auto">
+      <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         <p className="text-gray-500 text-sm mb-6">
           Select a command category to perform actions and view results.
         </p>

@@ -6,7 +6,7 @@ import {
   Smartphone, MapPin, Bell, Phone, MessageSquare, Globe,
   Wifi, WifiOff, Clock, TrendingUp, TrendingDown, Camera,
   Shield, Activity, Users, Eye, Zap, ChevronRight, BarChart2,
-  PhoneIncoming, PhoneOutgoing, PhoneMissed, Image as ImageIcon,
+  PhoneIncoming, PhoneOutgoing, PhoneMissed, Image as ImageIcon, Menu,
 } from 'lucide-react';
 import {
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip,
@@ -18,6 +18,7 @@ import {
 } from '@/lib/api';
 import type { Device, LocationLog, NotificationLog } from '@/types';
 import { getUser } from '@/lib/auth';
+import { useMobileNav } from '@/context/MobileNavContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -65,14 +66,14 @@ function StatCard({ label, value, sub, icon, from, to, iconBg, trend }: {
   from: string; to: string; iconBg: string; trend?: 'up' | 'down' | 'neutral';
 }) {
   return (
-    <div className={`relative overflow-hidden rounded-2xl p-5 bg-gradient-to-br ${from} ${to} shadow-sm border border-white/70`}>
-      <div className="flex items-start justify-between gap-3">
+    <div className={`relative overflow-hidden rounded-2xl p-3.5 sm:p-5 bg-gradient-to-br ${from} ${to} shadow-sm border border-white/70`}>
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="min-w-0">
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">{label}</p>
-          <p className="text-2xl font-extrabold text-gray-900 mt-1 leading-none">{value}</p>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide sm:tracking-widest truncate">{label}</p>
+          <p className="text-xl sm:text-2xl font-extrabold text-gray-900 mt-1 leading-none">{value}</p>
           {sub && <p className="text-[11px] text-gray-500 mt-1.5 truncate">{sub}</p>}
         </div>
-        <div className={`w-11 h-11 ${iconBg} rounded-2xl flex items-center justify-center shadow-sm flex-shrink-0`}>
+        <div className={`w-9 h-9 sm:w-11 sm:h-11 ${iconBg} rounded-xl sm:rounded-2xl flex items-center justify-center shadow-sm flex-shrink-0`}>
           {icon}
         </div>
       </div>
@@ -150,6 +151,7 @@ function ChartTip({ active, payload, label }: { active?: boolean; payload?: {nam
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const { toggle: toggleNav } = useMobileNav();
   const [parentName, setParentName] = useState('');
   const [devices,    setDevices]    = useState<Device[]>([]);
   const [selected,   setSelected]   = useState('');
@@ -225,7 +227,7 @@ export default function DashboardPage() {
   // ── Loading skeleton ────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="flex-1 p-8 space-y-6">
+      <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
         <Sk h="h-20" r="rounded-2xl" />
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <Sk key={i} h="h-28" />)}
@@ -241,15 +243,21 @@ export default function DashboardPage() {
     <div className="flex-1 overflow-y-auto bg-gray-50/50">
 
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="bg-white border-b border-gray-100 px-8 py-5 sticky top-0 z-10">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div>
+      <div className="bg-white border-b border-gray-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-5 sticky top-0 z-10">
+        <div className="flex items-center justify-between flex-wrap gap-3 sm:gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={toggleNav} aria-label="Open menu"
+              className="lg:hidden -ml-1 p-2 rounded-xl text-gray-600 hover:bg-gray-100 flex-shrink-0">
+              <Menu size={22} />
+            </button>
+          <div className="min-w-0">
             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest">
               {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
-            <h1 className="text-xl font-extrabold text-gray-900 mt-0.5">
+            <h1 className="text-lg sm:text-xl font-extrabold text-gray-900 mt-0.5 truncate">
               {greeting()}, {parentName} 👋
             </h1>
+          </div>
           </div>
 
           {/* Device pills */}
@@ -282,7 +290,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="p-6 space-y-5">
+      <div className="p-4 sm:p-6 space-y-5">
 
         {/* ── 6 Stat Cards ─────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">

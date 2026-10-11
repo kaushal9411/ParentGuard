@@ -54,7 +54,7 @@ export default function AppsPage() {
     <>
       <Header title="App Usage" subtitle="See which apps your child uses most" />
 
-      <main className="flex-1 p-8 space-y-6">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Controls */}
         <div className="card py-4">
           <div className="flex flex-wrap items-center gap-4">
@@ -115,12 +115,12 @@ export default function AppsPage() {
             <div className="card">
               <h3 className="font-bold text-gray-900 mb-5">All Apps</h3>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full min-w-[360px] sm:min-w-[560px] text-sm">
                   <thead>
                     <tr className="text-left text-xs text-gray-400 uppercase tracking-wide border-b border-gray-100">
                       <th className="pb-3 pr-4">#</th>
                       <th className="pb-3 pr-4">App Name</th>
-                      <th className="pb-3 pr-4">Package</th>
+                      <th className="pb-3 pr-4 hidden sm:table-cell">Package</th>
                       <th className="pb-3 pr-4">Usage</th>
                       <th className="pb-3">% of Total</th>
                     </tr>
@@ -133,7 +133,7 @@ export default function AppsPage() {
                         <tr key={l.id} className="hover:bg-gray-50">
                           <td className="py-3 pr-4 text-gray-400 font-mono text-xs">{i + 1}</td>
                           <td className="py-3 pr-4 font-semibold text-gray-900">{l.appName}</td>
-                          <td className="py-3 pr-4 font-mono text-xs text-gray-400">{l.packageName}</td>
+                          <td className="py-3 pr-4 font-mono text-xs text-gray-400 hidden sm:table-cell">{l.packageName}</td>
                           <td className="py-3 pr-4">
                             <span className="font-semibold text-primary">{msToHm(ms)}</span>
                           </td>

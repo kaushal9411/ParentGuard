@@ -97,7 +97,7 @@ export default function RemoteHubPage() {
     <>
       <Header title="Remote Access" subtitle="Control and reach your child's device remotely" />
 
-      <main className="flex-1 p-8">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-11 h-11 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl flex items-center justify-center">
             <Radio size={22} className="text-indigo-600" />

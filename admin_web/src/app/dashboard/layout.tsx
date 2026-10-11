@@ -6,6 +6,7 @@ import Sidebar from '@/components/Sidebar';
 import RouteLoader from '@/components/RouteLoader';
 import { Toaster } from 'sonner';
 import { PlanProvider } from '@/context/PlanContext';
+import { MobileNavProvider } from '@/context/MobileNavContext';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -15,12 +16,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <PlanProvider>
-      <div className="flex min-h-screen bg-surface">
-        <RouteLoader />
-        <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0">{children}</div>
-        <Toaster position="top-right" richColors closeButton />
-      </div>
+      <MobileNavProvider>
+        <div className="flex min-h-screen bg-surface">
+          <RouteLoader />
+          <Sidebar />
+          <div className="flex-1 flex flex-col min-w-0">{children}</div>
+          <Toaster position="top-right" richColors closeButton />
+        </div>
+      </MobileNavProvider>
     </PlanProvider>
   );
 }

@@ -500,7 +500,7 @@ function CallsTab({ data }: { data: UserDetail }) {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[
           { label: 'Incoming', value: stats.incoming, color: 'text-green-400 bg-green-900/20 border-green-800/40' },
           { label: 'Outgoing', value: stats.outgoing, color: 'text-blue-400 bg-blue-900/20 border-blue-800/40' },
@@ -514,9 +514,9 @@ function CallsTab({ data }: { data: UserDetail }) {
       </div>
 
       <Card className="p-6">
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
           <SectionHeader icon={<Phone size={18} />} title="Call Log" count={recentCallLogs.length} />
-          <div className="ml-auto relative">
+          <div className="relative w-full sm:w-auto sm:ml-auto">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search number or name…"
@@ -525,7 +525,7 @@ function CallsTab({ data }: { data: UserDetail }) {
         </div>
         {filtered.length === 0 ? <Empty msg="No call logs" /> : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="border-b border-gray-800 text-gray-400 text-xs">
                   <th className="text-left pb-3 pr-4">Contact</th>
@@ -596,7 +596,7 @@ function SmsTab({ data, userId }: { data: UserDetail; userId: string }) {
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[
           { label: 'Inbox',  value: inbox,  color: 'text-green-400 bg-green-900/20 border-green-800/40' },
           { label: 'Sent',   value: sent,   color: 'text-blue-400 bg-blue-900/20 border-blue-800/40' },
@@ -610,9 +610,9 @@ function SmsTab({ data, userId }: { data: UserDetail; userId: string }) {
       </div>
 
       <Card className="p-6">
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
           <SectionHeader icon={<MessageSquare size={18} />} title="SMS Messages" count={messages.length} />
-          <div className="ml-auto relative">
+          <div className="relative w-full sm:w-auto sm:ml-auto">
             <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
             <input value={search} onChange={(e) => setSearch(e.target.value)}
               placeholder="Search number or message…"
@@ -694,9 +694,9 @@ function ContactsTab({ data }: { data: UserDetail }) {
 
   return (
     <Card className="p-6">
-      <div className="flex items-center gap-3 mb-5">
+      <div className="flex flex-wrap items-center gap-3 mb-5">
         <SectionHeader icon={<ContactIcon size={18} />} title="Contacts" count={contacts.length} />
-        <div className="ml-auto relative">
+        <div className="relative w-full sm:w-auto sm:ml-auto">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search contacts…"
@@ -979,7 +979,7 @@ function GalleryTab({ data }: { data: UserDetail }) {
 
       <div className="space-y-5">
         {/* Stats row */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-4">
           {[
             { label: 'Total Items', value: galleryItems.length, color: 'text-white' },
             { label: 'Photos',      value: images,              color: 'text-pink-400' },
@@ -992,14 +992,14 @@ function GalleryTab({ data }: { data: UserDetail }) {
           ))}
         </div>
 
-        <div className="flex gap-5">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-5">
           {/* ── Album sidebar ── */}
-          <div className="flex-shrink-0 w-48">
+          <div className="flex-shrink-0 w-full md:w-48">
             <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2 px-1">Folders</p>
-            <div className="space-y-1">
+            <div className="flex md:block gap-2 md:gap-0 md:space-y-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
               <button
                 onClick={() => setAlbum('__all__')}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${album === '__all__' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                className={`md:w-full flex-shrink-0 whitespace-nowrap flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-sm transition-colors ${album === '__all__' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
               >
                 <span className="flex items-center gap-2 min-w-0">
                   <FolderOpen size={14} className="flex-shrink-0" />
@@ -1011,7 +1011,7 @@ function GalleryTab({ data }: { data: UserDetail }) {
                 <button
                   key={name}
                   onClick={() => setAlbum(name)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${album === name ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                  className={`md:w-full flex-shrink-0 whitespace-nowrap flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-sm transition-colors ${album === name ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
                 >
                   <span className="flex items-center gap-2 min-w-0">
                     <span className="flex-shrink-0">{albumIcon(name)}</span>
@@ -1202,7 +1202,7 @@ function BrowsingTab({ data }: { data: UserDetail }) {
   return (
     <div className="space-y-4">
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
         {[
           { label: 'Total Visits',    value: browsingHistory.length },
           { label: 'Unique Domains',  value: uniqueDomains },
@@ -1215,14 +1215,14 @@ function BrowsingTab({ data }: { data: UserDetail }) {
         ))}
       </div>
 
-      <div className="flex gap-5">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-5">
         {/* Browser sidebar */}
-        <div className="flex-shrink-0 w-44">
+        <div className="flex-shrink-0 w-full md:w-44">
           <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider mb-2 px-1">Browsers</p>
-          <div className="space-y-1">
+          <div className="flex md:block gap-2 md:gap-0 md:space-y-1 overflow-x-auto md:overflow-visible pb-1 md:pb-0">
             <button
               onClick={() => setBrowser('__all__')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${browser === '__all__' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+              className={`md:w-full flex-shrink-0 whitespace-nowrap flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-sm transition-colors ${browser === '__all__' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
             >
               <span className="flex items-center gap-2 min-w-0">
                 <Globe size={13} className="flex-shrink-0" />
@@ -1234,7 +1234,7 @@ function BrowsingTab({ data }: { data: UserDetail }) {
               <button
                 key={name}
                 onClick={() => setBrowser(name)}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm transition-colors ${browser === name ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
+                className={`md:w-full flex-shrink-0 whitespace-nowrap flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-sm transition-colors ${browser === name ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}
               >
                 <span className="flex items-center gap-2 min-w-0">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${browserColor(name)}`}>
@@ -1649,21 +1649,21 @@ export default function UserDetailPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Top header */}
-      <div className="px-8 pt-8 pb-5 border-b border-gray-800/60 space-y-4">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-5 border-b border-gray-800/60 space-y-4">
         <button onClick={() => router.push('/admin/users')}
           className="flex items-center gap-2 text-gray-400 hover:text-white text-sm transition-colors">
           <ArrowLeft size={16} /> Back to Users
         </button>
 
-        <div className="flex items-start justify-between pb-5 border-b border-gray-800">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-indigo-700 rounded-2xl flex items-center justify-center text-white font-bold text-xl">
+        <div className="flex flex-wrap items-start justify-between gap-4 pb-5 border-b border-gray-800">
+          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-indigo-700 rounded-2xl flex items-center justify-center text-white font-bold text-lg sm:text-xl flex-shrink-0">
               {user.name.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <h1 className="text-2xl font-extrabold text-white">{user.name}</h1>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-extrabold text-white truncate">{user.name}</h1>
               <div className="flex items-center gap-3 mt-1 flex-wrap">
-                <span className="text-gray-400 text-sm flex items-center gap-1"><Mail size={13} /> {user.email}</span>
+                <span className="text-gray-400 text-sm flex items-center gap-1 min-w-0 break-all"><Mail size={13} className="flex-shrink-0" /> {user.email}</span>
                 <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize
                   ${user.role === 'parent' ? 'bg-blue-900/40 text-blue-300' : 'bg-purple-900/40 text-purple-300'}`}>
                   {user.role}
@@ -1740,15 +1740,15 @@ export default function UserDetailPage() {
       </div>
 
       {/* Body: vertical nav + content */}
-      <div className="flex-1 flex min-h-0">
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0">
 
-        {/* ── Left vertical navigation ── */}
-        <nav className="w-56 flex-shrink-0 border-r border-gray-800/50 bg-gray-950/30 py-5 overflow-y-auto">
+        {/* ── Navigation: horizontal tab strip on phones/tablets, vertical sidebar on desktop ── */}
+        <nav className="w-full lg:w-56 flex-shrink-0 flex lg:block border-b lg:border-b-0 lg:border-r border-gray-800/50 bg-gray-950/30 py-2 lg:py-5 px-2 lg:px-0 overflow-x-auto lg:overflow-x-visible lg:overflow-y-auto">
           {NAV_GROUPS.map(({ label, keys }) => {
             const groupTabs = keys.map((k) => TABS.find((t) => t.key === k)!);
             return (
-              <div key={label} className="mb-5">
-                <p className="text-[10px] font-bold tracking-widest uppercase text-gray-600 px-4 mb-1.5 select-none">
+              <div key={label} className="mb-0 lg:mb-5 flex lg:block items-center flex-shrink-0">
+                <p className="hidden lg:block text-[10px] font-bold tracking-widest uppercase text-gray-600 px-4 mb-1.5 select-none">
                   {label}
                 </p>
                 {groupTabs.map((t) => {
@@ -1757,13 +1757,13 @@ export default function UserDetailPage() {
                     <button
                       key={t.key}
                       onClick={() => switchTab(t.key)}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 relative group
+                      className={`lg:w-full flex-shrink-0 whitespace-nowrap flex items-center gap-2 lg:gap-3 px-2 lg:px-3 py-2 lg:py-2.5 relative group
                         transition-all duration-150 ease-out
                         ${active ? 'text-white' : 'text-gray-500 hover:text-gray-200'}`}
                     >
                       {/* Animated left border indicator */}
                       <span
-                        className={`absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full transition-all duration-200
+                        className={`hidden lg:block absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-r-full transition-all duration-200
                           ${active ? 'opacity-100' : 'opacity-0 group-hover:opacity-20'}`}
                         style={{ backgroundColor: t.color }}
                       />
@@ -1783,7 +1783,7 @@ export default function UserDetailPage() {
                       <span className="relative z-10 text-xs font-semibold flex-1 text-left">{t.label}</span>
 
                       {active && (
-                        <ChevronRight size={12} className="relative z-10 text-gray-500 mr-1 flex-shrink-0" />
+                        <ChevronRight size={12} className="hidden lg:block relative z-10 text-gray-500 mr-1 flex-shrink-0" />
                       )}
                     </button>
                   );
@@ -1795,7 +1795,7 @@ export default function UserDetailPage() {
 
         {/* ── Content area ── */}
         <div
-          className="flex-1 p-7 overflow-y-auto"
+          className="flex-1 min-w-0 p-4 sm:p-6 lg:p-7 overflow-y-auto"
           style={{ opacity: contentVisible ? 1 : 0, transition: 'opacity 0.13s ease' }}
         >
           {tabContent[tab]}

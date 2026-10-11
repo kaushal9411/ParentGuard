@@ -52,7 +52,7 @@ function AddDeviceModal({ onClose, onAdded }: { onClose: () => void; onAdded: (d
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <h3 className="font-bold text-lg text-gray-900">Add Child Device</h3>
           <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition-colors">
@@ -180,16 +180,16 @@ export default function DevicesPage() {
     <>
       <Header title="Devices" subtitle="Manage all registered child devices" />
 
-      <main className="flex-1 p-8 space-y-6">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Device limit bar */}
         <div className="card py-4">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex-1">
+          <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+            <div className="flex-1 min-w-[10rem]">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm font-semibold text-gray-700">
+                <span className="text-sm font-semibold text-gray-700 whitespace-nowrap">
                   Devices used
                 </span>
-                <span className="text-sm font-bold text-gray-900">
+                <span className="text-sm font-bold text-gray-900 whitespace-nowrap">
                   {childDevices.length} / {plan.maxDevices}
                 </span>
               </div>

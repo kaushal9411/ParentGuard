@@ -122,10 +122,10 @@ export default function LocationPage() {
     <>
       <Header title="Location" subtitle="Real-time GPS tracking" />
 
-      <main className="flex-1 p-8 space-y-6">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
         {/* Device selector */}
         <div className="card py-4">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
             <label className="text-sm font-semibold text-gray-700 whitespace-nowrap">Select Device:</label>
             <select value={selected} onChange={(e) => setSelected(e.target.value)}
               className="input max-w-xs" disabled={devLoading}>
@@ -134,7 +134,7 @@ export default function LocationPage() {
               ))}
             </select>
             <button onClick={toggleLive} disabled={busy || !selected}
-              className={`ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 ${
+              className={`sm:ml-auto flex items-center gap-2 px-4 py-2 rounded-xl text-white font-bold text-sm transition-all active:scale-95 disabled:opacity-60 ${
                 live ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
               {busy ? <Loader size={15} className="animate-spin" />
                     : <Radio size={15} className={live ? 'animate-pulse' : ''} />}

@@ -69,7 +69,7 @@ function NotesModal({ inquiry, onClose, onSave }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-gray-800">
           <div>
             <h2 className="text-white font-bold">Inquiry from {inquiry.name}</h2>
@@ -171,7 +171,7 @@ export default function InquiriesPage() {
   return (
     <div className="flex-1 flex flex-col min-h-0">
       {/* Header */}
-      <div className="px-8 pt-8 pb-6 border-b border-gray-800">
+      <div className="px-4 sm:px-6 lg:px-8 pt-5 sm:pt-8 pb-6 border-b border-gray-800">
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-2xl font-extrabold text-white flex items-center gap-3">
@@ -223,7 +223,7 @@ export default function InquiriesPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-8 overflow-y-auto">
+      <div className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
         {loading ? <PageLoader theme="dark" /> : filtered.length === 0 ? (
           <div className="text-center py-20">
             <MessageSquare size={48} className="mx-auto mb-3 text-gray-700" />

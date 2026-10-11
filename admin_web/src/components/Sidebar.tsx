@@ -5,11 +5,13 @@ import {
   LayoutDashboard, Smartphone, MapPin, BarChart2, Bell, CreditCard, Download,
   LogOut, ChevronRight, ChevronLeft, ChevronDown, Image, Globe, Camera, Mic,
   FolderOpen, Zap, Map, Ban, MessageSquare, Monitor, AppWindow, Phone, Users,
-  AlarmClock, Siren, Cpu,
+  AlarmClock, Siren, Cpu, X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { clearAuth } from '@/lib/auth';
 import { usePlan, type PlanFeatures } from '@/context/PlanContext';
+import { useMobileNav } from '@/context/MobileNavContext';
+import { useMediaQuery } from '@/lib/useMediaQuery';
 
 type FeatureKey = keyof PlanFeatures | undefined;
 
@@ -79,18 +81,22 @@ export default function Sidebar() {
   const router   = useRouter();
   const plan     = usePlan();
   const [remoteOpen,  setRemoteOpen]  = useState(pathname.startsWith('/dashboard/remote'));
-  const [collapsed,   setCollapsed]   = useState(false);
+  const [collapsedPref, setCollapsedPref] = useState(false);
   const [mounted,     setMounted]     = useState(false);
+  const { open, setOpen } = useMobileNav();
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
+  // Collapsed (icon-only) mode only applies to the desktop sidebar; the mobile drawer is always full width
+  const collapsed = collapsedPref && isDesktop;
 
   useEffect(() => {
     const saved = localStorage.getItem('user_sidebar_collapsed');
-    if (saved === 'true') setCollapsed(true);
+    if (saved === 'true') setCollapsedPref(true);
     setMounted(true);
   }, []);
 
   function toggleCollapse() {
-    const next = !collapsed;
-    setCollapsed(next);
+    const next = !collapsedPref;
+    setCollapsedPref(next);
     localStorage.setItem('user_sidebar_collapsed', String(next));
   }
 
@@ -112,11 +118,20 @@ export default function Sidebar() {
   const w = !mounted ? 'w-64' : collapsed ? 'w-16' : 'w-64';
 
   return (
-    <aside className={`${w} min-h-screen bg-sidebar flex flex-col
-      transition-all duration-300 ease-in-out overflow-hidden flex-shrink-0`}>
+    <>
+    <div
+      onClick={() => setOpen(false)}
+      aria-hidden="true"
+      className={`fixed inset-0 z-40 bg-black/50 lg:hidden transition-opacity duration-300
+        ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+    />
+    <aside className={`${w} max-w-[85vw] bg-sidebar flex flex-col overflow-hidden flex-shrink-0
+      fixed inset-y-0 left-0 z-50 transform transition-all duration-300 ease-in-out
+      ${open ? 'translate-x-0' : '-translate-x-full'}
+      lg:static lg:z-auto lg:min-h-screen lg:max-w-none lg:translate-x-0`}>
 
       {/* ── Logo ──────────────────────────────────────────────────────────────── */}
-      <div className={`flex items-center border-b border-white/10 flex-shrink-0
+      <div className={`relative flex items-center border-b border-white/10 flex-shrink-0
         ${collapsed ? 'justify-center py-[22px] px-0' : 'gap-3 px-6 py-6'}`}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/logo.png" alt="ParentGard" className="w-10 h-10 object-contain flex-shrink-0" />
@@ -124,6 +139,10 @@ export default function Sidebar() {
           <p className="text-white font-bold text-base leading-none whitespace-nowrap">ParentGard</p>
           <p className="text-blue-300 text-xs mt-0.5 whitespace-nowrap">Parent Portal</p>
         </div>
+        <button onClick={() => setOpen(false)} aria-label="Close menu"
+          className="lg:hidden absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg text-blue-200 hover:bg-white/10">
+          <X size={20} />
+        </button>
       </div>
 
       {/* ── Plan badge (hidden when collapsed) ───────────────────────────────── */}
@@ -139,7 +158,7 @@ export default function Sidebar() {
       )}
 
       {/* ── Nav ───────────────────────────────────────────────────────────────── */}
-      <nav className={`flex-1 py-4 space-y-0.5 ${collapsed ? 'px-2' : 'px-3'}`}>
+      <nav className={`flex-1 min-h-0 overflow-y-auto py-4 space-y-0.5 ${collapsed ? 'px-2' : 'px-3'}`}>
         {!collapsed && (
           <p className="text-blue-400 text-xs font-semibold uppercase tracking-wider px-3 mb-3">
             Monitoring
@@ -237,7 +256,7 @@ export default function Sidebar() {
       <div className={`pb-6 flex-shrink-0 ${collapsed ? 'px-2' : 'px-3'}`}>
         <div className="border-t border-white/10 pt-4 space-y-0.5">
 
-          {/* Toggle */}
+          {/* Toggle (desktop only) */}
           {collapsed ? (
             <Tooltip label="Expand Menu">
               <button onClick={toggleCollapse}
@@ -248,7 +267,7 @@ export default function Sidebar() {
             </Tooltip>
           ) : (
             <button onClick={toggleCollapse}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+              className="hidden lg:flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
                 text-blue-200 hover:bg-white/10 hover:text-white transition-all duration-150">
               <ChevronLeft size={18} />
               <span className="whitespace-nowrap">Collapse Menu</span>
@@ -276,5 +295,6 @@ export default function Sidebar() {
         </div>
       </div>
     </aside>
+    </>
   );
 }

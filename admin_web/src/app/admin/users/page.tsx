@@ -88,7 +88,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="flex-1 p-8 space-y-6">
+    <div className="flex-1 p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div className="border-b border-gray-800 pb-6 flex items-center justify-between">
         <div>
@@ -98,8 +98,8 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Search */}
-      <form onSubmit={handleSearch} className="flex gap-3">
-        <div className="relative flex-1 max-w-md">
+      <form onSubmit={handleSearch} className="flex flex-wrap gap-3">
+        <div className="relative flex-1 min-w-[12rem] max-w-md">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" />
           <input value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name or email…"
@@ -128,16 +128,75 @@ export default function AdminUsersPage() {
             <p>{query ? 'No users match your search' : 'No users registered yet'}</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Mobile: card list */}
+          <div className="md:hidden divide-y divide-gray-800">
+            {users.map((u) => {
+              const childDevices = u.devices.filter((d) => d.role === 'child');
+              const anyOnline    = u.devices.some((d) => d.isOnline);
+              return (
+                <div key={u.id} className="p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-indigo-700 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                      {u.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-white font-semibold text-sm truncate">{u.name}</p>
+                      <p className="text-gray-500 text-xs truncate">{u.email}</p>
+                    </div>
+                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize flex-shrink-0
+                      ${u.role === 'parent' ? 'bg-blue-900/40 text-blue-300' : 'bg-purple-900/40 text-purple-300'}`}>
+                      {u.role}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+                    <span className="flex items-center gap-1.5 text-gray-300">
+                      <Smartphone size={13} className="text-gray-500" />
+                      {childDevices.length} child
+                      {u.devices.length !== childDevices.length && (
+                        <span className="text-gray-600">/ {u.devices.length - childDevices.length} parent</span>
+                      )}
+                    </span>
+                    {anyOnline ? (
+                      <span className="flex items-center gap-1.5 font-medium text-green-400"><Wifi size={12} /> Online</span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 font-medium text-gray-500">
+                        <WifiOff size={12} /> {timeAgo(u.devices[0]?.lastSeen ?? null)}
+                      </span>
+                    )}
+                    <span className="text-gray-500">
+                      Joined {new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => router.push(`/admin/users/${u.id}`)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-indigo-300 bg-indigo-600/15 hover:bg-indigo-600/25 rounded-lg transition-colors">
+                      <Eye size={14} /> View
+                    </button>
+                    <button onClick={() => deleteUser(u.id, u.name)} disabled={deleting === u.id}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-red-400 bg-red-900/20 hover:bg-red-900/40 rounded-lg transition-colors disabled:opacity-40">
+                      {deleting === u.id
+                        ? <span className="w-3.5 h-3.5 border-2 border-red-400 border-t-transparent rounded-full animate-spin block" />
+                        : <Trash2 size={14} />}
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Tablet / desktop: table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-gray-800 text-left">
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">User</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Role</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Devices</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Status</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Joined</th>
-                  <th className="px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Actions</th>
+                  <th className="px-4 lg:px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">User</th>
+                  <th className="px-4 lg:px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Role</th>
+                  <th className="px-4 lg:px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Devices</th>
+                  <th className="px-4 lg:px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Status</th>
+                  <th className="px-4 lg:px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Joined</th>
+                  <th className="px-4 lg:px-6 py-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-800">
@@ -146,7 +205,7 @@ export default function AdminUsersPage() {
                   const anyOnline    = u.devices.some((d) => d.isOnline);
                   return (
                     <tr key={u.id} className="hover:bg-gray-800/50 transition-colors">
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-9 h-9 bg-indigo-700 rounded-xl flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                             {u.name.charAt(0).toUpperCase()}
@@ -157,13 +216,13 @@ export default function AdminUsersPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize
                           ${u.role === 'parent' ? 'bg-blue-900/40 text-blue-300' : 'bg-purple-900/40 text-purple-300'}`}>
                           {u.role}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center gap-1.5 text-gray-300 text-sm">
                           <Smartphone size={14} className="text-gray-500" />
                           {childDevices.length} child
@@ -174,7 +233,7 @@ export default function AdminUsersPage() {
                           )}
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         {anyOnline ? (
                           <span className="flex items-center gap-1.5 text-xs font-medium text-green-400">
                             <Wifi size={12} /> Online
@@ -186,10 +245,10 @@ export default function AdminUsersPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 text-gray-400 text-sm">
+                      <td className="px-4 lg:px-6 py-4 text-gray-400 text-sm">
                         {new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-4 lg:px-6 py-4">
                         <div className="flex items-center gap-2">
                           <button onClick={() => router.push(`/admin/users/${u.id}`)}
                             className="p-2 hover:bg-indigo-600/20 text-gray-400 hover:text-indigo-300 rounded-lg transition-colors">
@@ -211,11 +270,12 @@ export default function AdminUsersPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         {/* Pagination */}
         {pages > 1 && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-t border-gray-800">
             <p className="text-sm text-gray-500">
               Page {page} of {pages} · {total} users
             </p>
